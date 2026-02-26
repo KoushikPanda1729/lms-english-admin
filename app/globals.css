@@ -1,26 +1,233 @@
+/* ==========================================
+   Global Styles — English Speaking Admin
+   ========================================== */
+
 @import 'tailwindcss';
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ---------- Reset & Base ---------- */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+html,
+body {
+  min-height: 100vh;
+  font-family:
+    'Inter',
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition:
+    background-color 0.3s ease,
+    color 0.3s ease;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* ---------- Theme Variables ---------- */
+.theme-dark {
+  background: #0f0f1a;
+  color: #e8e8f0;
+}
+
+.theme-light {
+  background: #f5f6fa;
+  color: #1a1a2e;
+}
+
+/* ---------- Custom Scrollbar ---------- */
+.theme-dark ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.theme-dark ::-webkit-scrollbar-track {
+  background: #12122a;
+}
+.theme-dark ::-webkit-scrollbar-thumb {
+  background: #2d2d4a;
+  border-radius: 3px;
+}
+.theme-dark ::-webkit-scrollbar-thumb:hover {
+  background: #6c5ce7;
+}
+
+.theme-light ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.theme-light ::-webkit-scrollbar-track {
+  background: #ecedf2;
+}
+.theme-light ::-webkit-scrollbar-thumb {
+  background: #c8c9d4;
+  border-radius: 3px;
+}
+.theme-light ::-webkit-scrollbar-thumb:hover {
+  background: #6c5ce7;
+}
+
+/* ---------- Ant Design Overrides ---------- */
+
+/* Sidebar smooth transitions */
+.ant-layout-sider {
+  transition: all 0.3s cubic-bezier(0.2, 0, 0, 1) !important;
+}
+
+/* Card hover effects */
+.stats-card {
+  transition: all 0.3s ease;
+}
+
+.theme-dark .stats-card {
+  border: 1px solid #2d2d4a;
+}
+.theme-light .stats-card {
+  border: 1px solid #e2e4ec;
+}
+
+.theme-dark .stats-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(108, 92, 231, 0.3);
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.3),
+    0 0 0 1px rgba(108, 92, 231, 0.15);
+}
+
+.theme-light .stats-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(108, 92, 231, 0.25);
+  box-shadow:
+    0 12px 40px rgba(108, 92, 231, 0.1),
+    0 0 0 1px rgba(108, 92, 231, 0.1);
+}
+
+/* Glassmorphism card */
+.theme-dark .glass-card {
+  background: rgba(26, 26, 46, 0.8) !important;
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(45, 45, 74, 0.6) !important;
+}
+
+.theme-light .glass-card {
+  background: rgba(255, 255, 255, 0.9) !important;
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(226, 228, 236, 0.8) !important;
+}
+
+/* Gradient text */
+.gradient-text {
+  background: linear-gradient(135deg, #6c5ce7 0%, #a29bfe 50%, #74b9ff 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Active menu glow */
+.ant-menu-item-selected {
+  position: relative;
+}
+
+.ant-menu-item-selected::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 60%;
+  background: #6c5ce7;
+  border-radius: 0 3px 3px 0;
+}
+
+/* Table row transitions */
+.ant-table-row {
+  transition: all 0.2s ease;
+}
+
+/* Badge pulse animation */
+@keyframes pulse-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(108, 92, 231, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(108, 92, 231, 0);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+.pulse-glow {
+  animation: pulse-glow 2s infinite;
+}
+
+/* Fade in animation */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeInUp 0.4s ease-out forwards;
+}
+
+/* Staggered animations for cards */
+.animate-stagger > * {
+  animation: fadeInUp 0.4s ease-out forwards;
+  opacity: 0;
+}
+.animate-stagger > *:nth-child(1) {
+  animation-delay: 0ms;
+}
+.animate-stagger > *:nth-child(2) {
+  animation-delay: 80ms;
+}
+.animate-stagger > *:nth-child(3) {
+  animation-delay: 160ms;
+}
+.animate-stagger > *:nth-child(4) {
+  animation-delay: 240ms;
+}
+.animate-stagger > *:nth-child(5) {
+  animation-delay: 320ms;
+}
+.animate-stagger > *:nth-child(6) {
+  animation-delay: 400ms;
+}
+
+/* Header search input */
+.header-search .ant-input {
+  background: transparent !important;
+}
+
+/* Sidebar logo area */
+.sidebar-logo {
+  transition: all 0.3s ease;
+}
+
+/* Smooth page transitions */
+.page-content {
+  animation: fadeInUp 0.3s ease-out;
+}
+
+/* Theme transition smoothing */
+.ant-layout,
+.ant-layout-sider,
+.ant-layout-header,
+.ant-card,
+.ant-table,
+.ant-input,
+.ant-select {
+  transition:
+    background-color 0.3s ease,
+    border-color 0.3s ease,
+    color 0.3s ease !important;
 }
