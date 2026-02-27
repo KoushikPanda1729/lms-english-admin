@@ -1,9 +1,9 @@
 'use client';
 
-import { useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRef, useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
-import { Form, Input, Button, Checkbox, Typography, message, Divider } from 'antd';
+import { Form, Input, Button, Checkbox, Typography, message, Divider, Spin } from 'antd';
 import { MailOutlined, LockOutlined, EyeInvisibleOutlined, EyeTwoTone } from '@ant-design/icons';
 import { GoogleLogin } from '@react-oauth/google';
 
@@ -36,15 +36,35 @@ import './login.css';
 
 const { Title, Text, Link } = Typography;
 
-export default function LoginPage() {
+const ADMIN_ROLES = ['admin', 'super_admin', 'moderator'];
+
+function LoginContent() {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [checking, setChecking] = useState(true);
   const [messageApi, contextHolder] = message.useMessage();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const dispatch = useAppDispatch();
   const googleBtnRef = useRef<HTMLDivElement>(null);
 
-  const ADMIN_ROLES = ['admin', 'super_admin', 'moderator'];
+  const redirectTo = searchParams.get('redirect') || ROUTES.DASHBOARD;
+
+  // If already authenticated, skip login and go to dashboard
+  useEffect(() => {
+    authService
+      .self()
+      .then((user) => {
+        if (ADMIN_ROLES.includes(user.role)) {
+          router.replace(ROUTES.DASHBOARD);
+        } else {
+          setChecking(false);
+        }
+      })
+      .catch(() => {
+        setChecking(false);
+      });
+  }, [router]);
 
   const handleLogin = async (values: { email: string; password: string; remember: boolean }) => {
     setLoading(true);
@@ -62,7 +82,7 @@ export default function LoginPage() {
         }),
       );
       messageApi.success('Welcome back! Redirecting...');
-      setTimeout(() => router.push(ROUTES.DASHBOARD), 800);
+      setTimeout(() => router.push(redirectTo), 800);
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
@@ -89,7 +109,7 @@ export default function LoginPage() {
         }),
       );
       messageApi.success('Welcome back! Redirecting...');
-      setTimeout(() => router.push(ROUTES.DASHBOARD), 800);
+      setTimeout(() => router.push(redirectTo), 800);
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
@@ -109,6 +129,21 @@ export default function LoginPage() {
       messageApi.error('Google Sign-In not ready, please try again');
     }
   };
+
+  if (checking) {
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <Spin size="large" />
+      </div>
+    );
+  }
 
   return (
     <div className="login-page">
@@ -311,5 +346,26 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div
+          style={{
+            minHeight: '100vh',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Spin size="large" />
+        </div>
+      }
+    >
+      <LoginContent />
+    </Suspense>
   );
 }

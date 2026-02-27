@@ -15,6 +15,9 @@ import {
   message,
   Spin,
   Modal,
+  Divider,
+  Descriptions,
+  Skeleton,
 } from 'antd';
 import {
   SearchOutlined,
@@ -23,14 +26,23 @@ import {
   StopOutlined,
   CheckCircleOutlined,
   CrownOutlined,
+  EyeOutlined,
+  ClockCircleOutlined,
+  FireOutlined,
+  GlobalOutlined,
+  FlagOutlined,
 } from '@ant-design/icons';
+import dayjs from 'dayjs';
+import relativeTime from 'dayjs/plugin/relativeTime';
 import PageHeader from '@/components/shared/PageHeader';
 import { useAppSelector } from '@/store/hooks';
 import { getTokens } from '@/lib/theme';
 import { STATUS_COLORS } from '@/lib/constants';
 import { adminService } from '@/lib/services/admin';
 
-const { Text } = Typography;
+dayjs.extend(relativeTime);
+
+const { Text, Title } = Typography;
 
 interface UserRow {
   user: { id: string; email: string; role: string; isBanned: boolean; createdAt: string };
@@ -40,6 +52,28 @@ interface UserRow {
     avatarUrl: string | null;
   } | null;
   pendingReportsCount: number;
+}
+
+interface UserDetail {
+  user: { id: string; email: string; role: string; isBanned: boolean; createdAt: string };
+  profile: {
+    displayName: string | null;
+    username: string | null;
+    avatarUrl: string | null;
+    bio: string | null;
+    nativeLanguage: string | null;
+    englishLevel: string | null;
+    learningGoal: string | null;
+    country: string | null;
+    timezone: string | null;
+    totalPracticeMins: number;
+    totalSessions: number;
+    streakDays: number;
+    lastSessionAt: string | null;
+    lastActiveAt: string | null;
+  } | null;
+  pendingReportsCount: number;
+  totalReportsCount: number;
 }
 
 export default function UsersPage() {
@@ -52,6 +86,12 @@ export default function UsersPage() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [messageApi, contextHolder] = message.useMessage();
+
+  // Detail modal
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailUser, setDetailUser] = useState<UserDetail | null>(null);
+
   const mode = useAppSelector((state) => state.theme.mode);
   const t = getTokens(mode);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -116,7 +156,29 @@ export default function UsersPage() {
     });
   };
 
+  const openDetail = async (id: string) => {
+    setDetailOpen(true);
+    setDetailLoading(true);
+    setDetailUser(null);
+    try {
+      const data = await adminService.getUserDetail(id);
+      setDetailUser(data as UserDetail);
+    } catch {
+      messageApi.error('Failed to load user details');
+      setDetailOpen(false);
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
   const getActionItems = (record: UserRow) => [
+    {
+      key: 'view',
+      icon: <EyeOutlined />,
+      label: 'View Details',
+      onClick: () => openDetail(record.user.id),
+    },
+    { type: 'divider' as const, key: 'div1' },
     record.user.isBanned
       ? {
           key: 'unban',
@@ -131,7 +193,7 @@ export default function UsersPage() {
           danger: true,
           onClick: () => handleBan(record.user.id, true),
         },
-    { type: 'divider' as const, key: 'div' },
+    { type: 'divider' as const, key: 'div2' },
     {
       key: 'make-admin',
       icon: <CrownOutlined />,
@@ -237,6 +299,13 @@ export default function UsersPage() {
     },
   ];
 
+  // ─── Detail Modal helpers ────────────────────────────────────────────────────
+
+  const p = detailUser?.profile;
+  const u = detailUser?.user;
+  const status = u?.isBanned ? 'banned' : 'active';
+  const displayName = p?.displayName || u?.email?.split('@')[0] || '';
+
   return (
     <div>
       {contextHolder}
@@ -302,6 +371,253 @@ export default function UsersPage() {
           />
         </Spin>
       </Card>
+
+      {/* ─── User Detail Modal ──────────────────────────────────────────────── */}
+      <Modal
+        open={detailOpen}
+        onCancel={() => setDetailOpen(false)}
+        footer={null}
+        width={600}
+        destroyOnClose
+        title={
+          <Space>
+            <UserOutlined style={{ color: '#6C5CE7' }} />
+            <span>User Details</span>
+          </Space>
+        }
+      >
+        {detailLoading ? (
+          <Skeleton active avatar paragraph={{ rows: 6 }} style={{ padding: '16px 0' }} />
+        ) : detailUser ? (
+          <div style={{ paddingTop: 8 }}>
+            {/* Header */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 16,
+                padding: '16px 20px',
+                borderRadius: 12,
+                background: 'rgba(108,92,231,0.06)',
+                border: '1px solid rgba(108,92,231,0.15)',
+                marginBottom: 20,
+              }}
+            >
+              <Avatar
+                size={60}
+                src={p?.avatarUrl || undefined}
+                icon={<UserOutlined />}
+                style={{ background: 'linear-gradient(135deg, #6C5CE7, #A29BFE)', flexShrink: 0 }}
+              />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <Title level={5} style={{ margin: 0, color: t.textPrimary }}>
+                  {displayName}
+                </Title>
+                {p?.username && (
+                  <Text style={{ color: t.textMuted, fontSize: 13 }}>@{p.username}</Text>
+                )}
+                <div style={{ marginTop: 6, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <Tag
+                    style={{
+                      background: 'rgba(108,92,231,0.1)',
+                      color: '#6C5CE7',
+                      border: '1px solid rgba(108,92,231,0.2)',
+                      borderRadius: 6,
+                      textTransform: 'capitalize',
+                    }}
+                  >
+                    {u?.role}
+                  </Tag>
+                  <Tag
+                    style={{
+                      background: `${STATUS_COLORS[status]}18`,
+                      color: STATUS_COLORS[status],
+                      border: `1px solid ${STATUS_COLORS[status]}30`,
+                      borderRadius: 6,
+                      textTransform: 'capitalize',
+                    }}
+                  >
+                    {status}
+                  </Tag>
+                </div>
+              </div>
+            </div>
+
+            {/* Account */}
+            <Text strong style={{ color: t.textPrimary, display: 'block', marginBottom: 8 }}>
+              Account
+            </Text>
+            <Descriptions
+              column={2}
+              size="small"
+              labelStyle={{ color: t.textMuted, fontSize: 13 }}
+              contentStyle={{ color: t.textPrimary, fontSize: 13 }}
+              style={{ marginBottom: 4 }}
+            >
+              <Descriptions.Item label="Email" span={2}>
+                {u?.email}
+              </Descriptions.Item>
+              <Descriptions.Item label="User ID" span={2}>
+                <Text
+                  copyable
+                  style={{ color: t.textMuted, fontSize: 12, fontFamily: 'monospace' }}
+                >
+                  {u?.id}
+                </Text>
+              </Descriptions.Item>
+              <Descriptions.Item label="Joined">
+                {dayjs(u?.createdAt).format('DD MMM YYYY')}
+              </Descriptions.Item>
+              <Descriptions.Item label="Last Active">
+                {p?.lastActiveAt ? dayjs(p.lastActiveAt).fromNow() : '—'}
+              </Descriptions.Item>
+            </Descriptions>
+
+            <Divider style={{ margin: '14px 0' }} />
+
+            {/* Profile */}
+            <Text strong style={{ color: t.textPrimary, display: 'block', marginBottom: 8 }}>
+              Profile
+            </Text>
+            <Descriptions
+              column={2}
+              size="small"
+              labelStyle={{ color: t.textMuted, fontSize: 13 }}
+              contentStyle={{ color: t.textPrimary, fontSize: 13 }}
+              style={{ marginBottom: 4 }}
+            >
+              <Descriptions.Item label="Native Language">
+                {p?.nativeLanguage || '—'}
+              </Descriptions.Item>
+              <Descriptions.Item label="English Level">
+                {p?.englishLevel ? (
+                  <Tag color="blue" style={{ borderRadius: 6, textTransform: 'capitalize' }}>
+                    {p.englishLevel}
+                  </Tag>
+                ) : (
+                  '—'
+                )}
+              </Descriptions.Item>
+              <Descriptions.Item label="Learning Goal">{p?.learningGoal || '—'}</Descriptions.Item>
+              <Descriptions.Item
+                label={
+                  <Space size={4}>
+                    <GlobalOutlined />
+                    Country
+                  </Space>
+                }
+              >
+                {p?.country || '—'}
+              </Descriptions.Item>
+              <Descriptions.Item label="Timezone" span={2}>
+                {p?.timezone || '—'}
+              </Descriptions.Item>
+              {p?.bio && (
+                <Descriptions.Item label="Bio" span={2}>
+                  <Text style={{ color: t.textSecondary, fontSize: 13 }}>{p.bio}</Text>
+                </Descriptions.Item>
+              )}
+            </Descriptions>
+
+            <Divider style={{ margin: '14px 0' }} />
+
+            {/* Activity */}
+            <Text strong style={{ color: t.textPrimary, display: 'block', marginBottom: 12 }}>
+              Activity
+            </Text>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, 1fr)',
+                gap: 10,
+                marginBottom: 4,
+              }}
+            >
+              {[
+                {
+                  icon: <ClockCircleOutlined style={{ color: '#6C5CE7' }} />,
+                  label: 'Practice',
+                  value: `${p?.totalPracticeMins ?? 0} min`,
+                },
+                {
+                  icon: <UserOutlined style={{ color: '#00B894' }} />,
+                  label: 'Sessions',
+                  value: p?.totalSessions ?? 0,
+                },
+                {
+                  icon: <FireOutlined style={{ color: '#FF7675' }} />,
+                  label: 'Streak',
+                  value: `${p?.streakDays ?? 0} days`,
+                },
+              ].map((stat) => (
+                <div
+                  key={stat.label}
+                  style={{
+                    padding: '12px 14px',
+                    borderRadius: 10,
+                    border: `1px solid ${t.border}`,
+                    textAlign: 'center',
+                  }}
+                >
+                  <div style={{ fontSize: 20, marginBottom: 4 }}>{stat.icon}</div>
+                  <Text strong style={{ color: t.textPrimary, display: 'block', fontSize: 16 }}>
+                    {stat.value}
+                  </Text>
+                  <Text style={{ color: t.textMuted, fontSize: 12 }}>{stat.label}</Text>
+                </div>
+              ))}
+            </div>
+            {p?.lastSessionAt && (
+              <Text style={{ color: t.textMuted, fontSize: 12, display: 'block', marginTop: 6 }}>
+                <ClockCircleOutlined style={{ marginRight: 4 }} />
+                Last session {dayjs(p.lastSessionAt).fromNow()}
+              </Text>
+            )}
+
+            <Divider style={{ margin: '14px 0' }} />
+
+            {/* Reports */}
+            <Text strong style={{ color: t.textPrimary, display: 'block', marginBottom: 8 }}>
+              Reports
+            </Text>
+            <div style={{ display: 'flex', gap: 12 }}>
+              {[
+                {
+                  label: 'Pending Reports',
+                  value: detailUser.pendingReportsCount,
+                  color: detailUser.pendingReportsCount > 0 ? '#FF7675' : '#00B894',
+                },
+                {
+                  label: 'Total Reports',
+                  value: detailUser.totalReportsCount,
+                  color: t.textPrimary,
+                },
+              ].map((r) => (
+                <div
+                  key={r.label}
+                  style={{
+                    flex: 1,
+                    padding: '12px 14px',
+                    borderRadius: 10,
+                    border: `1px solid ${t.border}`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                  }}
+                >
+                  <FlagOutlined style={{ color: r.color, fontSize: 16 }} />
+                  <div>
+                    <Text strong style={{ color: r.color, display: 'block', fontSize: 16 }}>
+                      {r.value}
+                    </Text>
+                    <Text style={{ color: t.textMuted, fontSize: 12 }}>{r.label}</Text>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </Modal>
     </div>
   );
 }

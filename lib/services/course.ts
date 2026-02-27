@@ -47,4 +47,8 @@ export const courseService = {
     const { data } = await api.patch(`/admin/courses/${id}`, body);
     return data.data;
   },
+
+  async deleteCourse(id: string) {
+    await api.delete(`/admin/courses/${id}`);
+  },
 };

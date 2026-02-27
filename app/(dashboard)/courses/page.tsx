@@ -25,6 +25,7 @@ import {
   MoreOutlined,
   EditOutlined,
   EyeOutlined,
+  DeleteOutlined,
 } from '@ant-design/icons';
 import PageHeader from '@/components/shared/PageHeader';
 import { useAppSelector } from '@/store/hooks';
@@ -162,6 +163,16 @@ export default function CoursesPage() {
     setEditOpen(true);
   };
 
+  const handleDelete = (id: string) => {
+    courseService
+      .deleteCourse(id)
+      .then(() => {
+        messageApi.success('Course deleted');
+        fetchCourses(page);
+      })
+      .catch(() => messageApi.error('Failed to delete course'));
+  };
+
   const getActionItems = (record: ApiCourse) => [
     {
       key: 'view',
@@ -174,6 +185,23 @@ export default function CoursesPage() {
       icon: <EditOutlined />,
       label: 'Edit Course',
       onClick: () => openEdit(record),
+    },
+    { type: 'divider' as const, key: 'div' },
+    {
+      key: 'delete',
+      icon: <DeleteOutlined />,
+      label: 'Delete Course',
+      danger: true,
+      onClick: () => {
+        Modal.confirm({
+          title: 'Delete this course?',
+          content: 'All lessons, content and progress will be permanently removed.',
+          okText: 'Delete',
+          okButtonProps: { danger: true },
+          cancelText: 'Cancel',
+          onOk: () => handleDelete(record.id),
+        });
+      },
     },
   ];
 

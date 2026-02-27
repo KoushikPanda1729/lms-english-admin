@@ -20,12 +20,13 @@ api.interceptors.response.use(
   async (error) => {
     const original = error.config;
 
-    // Skip retry for refresh/login to avoid infinite loops
+    // Skip retry for auth endpoints to avoid infinite loops
     if (
       error.response?.status === 401 &&
       !original._retry &&
       !original.url?.includes('/auth/refresh') &&
-      !original.url?.includes('/auth/login')
+      !original.url?.includes('/auth/login') &&
+      !original.url?.includes('/auth/self')
     ) {
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
@@ -47,7 +48,10 @@ api.interceptors.response.use(
         return api(original);
       } catch (err) {
         processQueue(err);
-        if (typeof window !== 'undefined') window.location.href = '/login';
+        if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+          const redirect = encodeURIComponent(window.location.pathname);
+          window.location.href = `/login?redirect=${redirect}`;
+        }
         return Promise.reject(err);
       } finally {
         isRefreshing = false;
