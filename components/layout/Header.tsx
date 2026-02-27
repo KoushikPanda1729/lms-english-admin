@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { Layout, Input, Badge, Avatar, Dropdown, Typography, Space, Tooltip } from 'antd';
 import {
   SearchOutlined,
@@ -12,16 +13,27 @@ import {
 } from '@ant-design/icons';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { toggleTheme } from '@/store/slices/themeSlice';
+import { clearCurrentUser } from '@/store/slices/userSlice';
 import { getTokens } from '@/lib/theme';
+import { authService } from '@/lib/services/auth';
 
 const { Header: AntHeader } = Layout;
 const { Text } = Typography;
 
 export default function Header() {
   const dispatch = useAppDispatch();
+  const router = useRouter();
   const currentUser = useAppSelector((state) => state.user.currentUser);
   const mode = useAppSelector((state) => state.theme.mode);
   const t = getTokens(mode);
+
+  const handleMenuClick = async ({ key }: { key: string }) => {
+    if (key === 'logout') {
+      await authService.logout(); // backend clears httpOnly cookies
+      dispatch(clearCurrentUser());
+      router.push('/login');
+    }
+  };
 
   const userMenuItems = [
     { key: 'profile', icon: <UserOutlined />, label: 'Profile' },
@@ -121,7 +133,11 @@ export default function Header() {
         </Badge>
 
         {/* User Avatar & Name */}
-        <Dropdown menu={{ items: userMenuItems }} trigger={['click']} placement="bottomRight">
+        <Dropdown
+          menu={{ items: userMenuItems, onClick: handleMenuClick }}
+          trigger={['click']}
+          placement="bottomRight"
+        >
           <Space
             style={{
               cursor: 'pointer',

@@ -2,6 +2,7 @@
 
 import { ConfigProvider } from 'antd';
 import { AntdRegistry } from '@ant-design/nextjs-registry';
+import { GoogleOAuthProvider } from '@react-oauth/google';
 import StoreProvider from '@/store/StoreProvider';
 import { useAppSelector } from '@/store/hooks';
 import { getThemeConfig } from '@/lib/theme';
@@ -37,11 +38,13 @@ export default function RootLayout({
         />
       </head>
       <body>
-        <StoreProvider>
-          <AntdRegistry>
-            <ThemeWrapper>{children}</ThemeWrapper>
-          </AntdRegistry>
-        </StoreProvider>
+        <GoogleOAuthProvider clientId={process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID!}>
+          <StoreProvider>
+            <AntdRegistry>
+              <ThemeWrapper>{children}</ThemeWrapper>
+            </AntdRegistry>
+          </StoreProvider>
+        </GoogleOAuthProvider>
       </body>
     </html>
   );

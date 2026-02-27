@@ -6,11 +6,7 @@ interface UserState {
 }
 
 const initialState: UserState = {
-  currentUser: {
-    name: 'Admin User',
-    email: 'admin@speakeasy.app',
-    role: 'super_admin',
-  },
+  currentUser: null,
 };
 
 const userSlice = createSlice({

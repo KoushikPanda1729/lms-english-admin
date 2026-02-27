@@ -1,170 +1,236 @@
 'use client';
 
-import { useState } from 'react';
-import { Table, Card, Input, Button, Tag, Avatar, Space, Dropdown, Select, Typography } from 'antd';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import {
+  Table,
+  Card,
+  Input,
+  Button,
+  Tag,
+  Avatar,
+  Space,
+  Dropdown,
+  Select,
+  Typography,
+  message,
+  Spin,
+  Modal,
+} from 'antd';
 import {
   SearchOutlined,
-  PlusOutlined,
   UserOutlined,
   MoreOutlined,
-  EditOutlined,
-  DeleteOutlined,
-  EyeOutlined,
+  StopOutlined,
+  CheckCircleOutlined,
+  CrownOutlined,
 } from '@ant-design/icons';
 import PageHeader from '@/components/shared/PageHeader';
 import { useAppSelector } from '@/store/hooks';
 import { getTokens } from '@/lib/theme';
-import { LEVEL_COLORS, STATUS_COLORS } from '@/lib/constants';
-import type { User } from '@/types';
+import { STATUS_COLORS } from '@/lib/constants';
+import { adminService } from '@/lib/services/admin';
 
 const { Text } = Typography;
 
-const mockUsers: User[] = Array.from({ length: 25 }, (_, i) => ({
-  id: `user-${i + 1}`,
-  name: [
-    'Rahul Sharma',
-    'Priya Patel',
-    'Amit Kumar',
-    'Sneha Gupta',
-    'Vikram Singh',
-    'Ananya Reddy',
-    'Rajesh Jain',
-    'Kavita Nair',
-    'Suresh Rao',
-    'Deepika Mishra',
-    'Arjun Das',
-    'Meera Iyer',
-    'Nikhil Bose',
-    'Pooja Verma',
-    'Rohit Menon',
-    'Swati Agarwal',
-    'Tarun Kapoor',
-    'Uma Devi',
-    'Varun Saxena',
-    'Neha Pandey',
-    'Kiran Desai',
-    'Lakshmi Rao',
-    'Manoj Tiwari',
-    'Nisha Kulkarni',
-    'Omprakash Yadav',
-  ][i],
-  email: `user${i + 1}@example.com`,
-  phone: `+91 98765 ${String(43210 + i).slice(0, 5)}`,
-  level: (['beginner', 'intermediate', 'advanced'] as const)[i % 3],
-  status: (['active', 'active', 'active', 'inactive', 'banned'] as const)[i % 5],
-  enrolledCourses: Math.floor(Math.random() * 8) + 1,
-  joinedAt: new Date(
-    2024,
-    Math.floor(Math.random() * 12),
-    Math.floor(Math.random() * 28) + 1,
-  ).toLocaleDateString(),
-  lastActive: ['Just now', '5 min ago', '1 hour ago', '2 hours ago', 'Yesterday'][i % 5],
-}));
+interface UserRow {
+  user: { id: string; email: string; role: string; isBanned: boolean; createdAt: string };
+  profile: {
+    displayName: string | null;
+    username: string | null;
+    avatarUrl: string | null;
+  } | null;
+  pendingReportsCount: number;
+}
 
 export default function UsersPage() {
   const [searchText, setSearchText] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
-  const [levelFilter, setLevelFilter] = useState<string | undefined>(undefined);
+  const [bannedFilter, setBannedFilter] = useState<boolean | undefined>(undefined);
+  const [roleFilter, setRoleFilter] = useState<string | undefined>(undefined);
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(20);
+  const [total, setTotal] = useState(0);
+  const [users, setUsers] = useState<UserRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [messageApi, contextHolder] = message.useMessage();
   const mode = useAppSelector((state) => state.theme.mode);
   const t = getTokens(mode);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const filteredUsers = mockUsers.filter((user) => {
-    const matchesSearch = !searchText || user.name.toLowerCase().includes(searchText.toLowerCase());
-    const matchesStatus = !statusFilter || user.status === statusFilter;
-    const matchesLevel = !levelFilter || user.level === levelFilter;
-    return matchesSearch && matchesStatus && matchesLevel;
-  });
+  const fetchUsers = useCallback(
+    async (p: number, search: string, isBanned?: boolean, role?: string) => {
+      setLoading(true);
+      try {
+        const result = await adminService.listUsers({
+          page: p,
+          limit: pageSize,
+          search: search || undefined,
+          isBanned,
+          role,
+        });
+        setUsers(result.users);
+        setTotal(result.total);
+      } catch {
+        messageApi.error('Failed to load users');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [pageSize, messageApi],
+  );
 
-  const actionItems = [
-    { key: 'view', icon: <EyeOutlined />, label: 'View Details' },
-    { key: 'edit', icon: <EditOutlined />, label: 'Edit User' },
+  useEffect(() => {
+    fetchUsers(page, searchText, bannedFilter, roleFilter);
+  }, [page, bannedFilter, roleFilter, fetchUsers, searchText]);
+
+  const handleSearchChange = (value: string) => {
+    setSearchText(value);
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => {
+      setPage(1);
+      fetchUsers(1, value, bannedFilter, roleFilter);
+    }, 500);
+  };
+
+  const handleBan = async (id: string, ban: boolean) => {
+    try {
+      await adminService.banUser(id, ban);
+      messageApi.success(ban ? 'User banned' : 'User unbanned');
+      fetchUsers(page, searchText, bannedFilter, roleFilter);
+    } catch {
+      messageApi.error('Failed to update ban status');
+    }
+  };
+
+  const handleRoleChange = async (id: string, role: string) => {
+    Modal.confirm({
+      title: `Change role to "${role}"?`,
+      onOk: async () => {
+        try {
+          await adminService.setUserRole(id, role);
+          messageApi.success('Role updated');
+          fetchUsers(page, searchText, bannedFilter, roleFilter);
+        } catch {
+          messageApi.error('Failed to update role');
+        }
+      },
+    });
+  };
+
+  const getActionItems = (record: UserRow) => [
+    record.user.isBanned
+      ? {
+          key: 'unban',
+          icon: <CheckCircleOutlined />,
+          label: 'Unban User',
+          onClick: () => handleBan(record.user.id, false),
+        }
+      : {
+          key: 'ban',
+          icon: <StopOutlined />,
+          label: 'Ban User',
+          danger: true,
+          onClick: () => handleBan(record.user.id, true),
+        },
     { type: 'divider' as const, key: 'div' },
-    { key: 'delete', icon: <DeleteOutlined />, label: 'Delete', danger: true },
+    {
+      key: 'make-admin',
+      icon: <CrownOutlined />,
+      label: 'Make Admin',
+      onClick: () => handleRoleChange(record.user.id, 'admin'),
+    },
+    {
+      key: 'make-user',
+      icon: <UserOutlined />,
+      label: 'Make User',
+      onClick: () => handleRoleChange(record.user.id, 'user'),
+    },
   ];
 
   const columns = [
     {
       title: 'User',
-      dataIndex: 'name',
-      key: 'name',
-      render: (name: string, record: User) => (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <Avatar
-            size={36}
-            icon={<UserOutlined />}
-            style={{ background: 'linear-gradient(135deg, #6C5CE7, #A29BFE)', fontWeight: 600 }}
-          />
-          <div>
-            <Text strong style={{ color: t.textPrimary, display: 'block' }}>
-              {name}
-            </Text>
-            <Text style={{ color: t.textMuted, fontSize: 12 }}>{record.email}</Text>
+      key: 'user',
+      render: (_: unknown, record: UserRow) => {
+        const displayName = record.profile?.displayName || record.user.email.split('@')[0];
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Avatar
+              size={36}
+              src={record.profile?.avatarUrl || undefined}
+              icon={<UserOutlined />}
+              style={{ background: 'linear-gradient(135deg, #6C5CE7, #A29BFE)', fontWeight: 600 }}
+            />
+            <div>
+              <Text strong style={{ color: t.textPrimary, display: 'block' }}>
+                {displayName}
+              </Text>
+              <Text style={{ color: t.textMuted, fontSize: 12 }}>{record.user.email}</Text>
+            </div>
           </div>
-        </div>
-      ),
+        );
+      },
     },
     {
-      title: 'Level',
-      dataIndex: 'level',
-      key: 'level',
-      render: (level: string) => (
+      title: 'Role',
+      key: 'role',
+      render: (_: unknown, record: UserRow) => (
         <Tag
           style={{
-            background: `${LEVEL_COLORS[level]}18`,
-            color: LEVEL_COLORS[level],
-            border: `1px solid ${LEVEL_COLORS[level]}30`,
+            background: 'rgba(108, 92, 231, 0.1)',
+            color: '#6C5CE7',
+            border: '1px solid rgba(108, 92, 231, 0.2)',
             borderRadius: 6,
             textTransform: 'capitalize' as const,
           }}
         >
-          {level}
+          {record.user.role}
         </Tag>
       ),
     },
     {
       title: 'Status',
-      dataIndex: 'status',
       key: 'status',
-      render: (status: string) => (
-        <Tag
-          style={{
-            background: `${STATUS_COLORS[status]}18`,
-            color: STATUS_COLORS[status],
-            border: `1px solid ${STATUS_COLORS[status]}30`,
-            borderRadius: 6,
-            textTransform: 'capitalize' as const,
-          }}
-        >
-          {status}
-        </Tag>
+      render: (_: unknown, record: UserRow) => {
+        const status = record.user.isBanned ? 'banned' : 'active';
+        return (
+          <Tag
+            style={{
+              background: `${STATUS_COLORS[status]}18`,
+              color: STATUS_COLORS[status],
+              border: `1px solid ${STATUS_COLORS[status]}30`,
+              borderRadius: 6,
+              textTransform: 'capitalize' as const,
+            }}
+          >
+            {status}
+          </Tag>
+        );
+      },
+    },
+    {
+      title: 'Reports',
+      key: 'reports',
+      render: (_: unknown, record: UserRow) => (
+        <Text style={{ color: record.pendingReportsCount > 0 ? '#FF7675' : t.textPrimary }}>
+          {record.pendingReportsCount}
+        </Text>
       ),
     },
     {
-      title: 'Courses',
-      dataIndex: 'enrolledCourses',
-      key: 'enrolledCourses',
-      render: (count: number) => <Text style={{ color: t.textPrimary }}>{count}</Text>,
-    },
-    {
       title: 'Joined',
-      dataIndex: 'joinedAt',
-      key: 'joinedAt',
-      render: (date: string) => <Text style={{ color: t.textMuted, fontSize: 13 }}>{date}</Text>,
-    },
-    {
-      title: 'Last Active',
-      dataIndex: 'lastActive',
-      key: 'lastActive',
-      render: (time: string) => (
-        <Text style={{ color: t.textSecondary, fontSize: 13 }}>{time}</Text>
+      key: 'createdAt',
+      render: (_: unknown, record: UserRow) => (
+        <Text style={{ color: t.textMuted, fontSize: 13 }}>
+          {new Date(record.user.createdAt).toLocaleDateString()}
+        </Text>
       ),
     },
     {
       title: '',
       key: 'actions',
       width: 48,
-      render: () => (
-        <Dropdown menu={{ items: actionItems }} trigger={['click']}>
+      render: (_: unknown, record: UserRow) => (
+        <Dropdown menu={{ items: getActionItems(record) }} trigger={['click']}>
           <Button type="text" icon={<MoreOutlined />} style={{ color: t.textMuted }} />
         </Dropdown>
       ),
@@ -173,15 +239,8 @@ export default function UsersPage() {
 
   return (
     <div>
-      <PageHeader
-        title="Users"
-        subtitle="Manage all registered users on the platform"
-        action={
-          <Button type="primary" icon={<PlusOutlined />} style={{ borderRadius: 10 }}>
-            Add User
-          </Button>
-        }
-      />
+      {contextHolder}
+      <PageHeader title="Users" subtitle="Manage all registered users on the platform" />
       <Card
         className="glass-card"
         style={{ borderRadius: 14, marginBottom: 20 }}
@@ -192,47 +251,56 @@ export default function UsersPage() {
             prefix={<SearchOutlined style={{ color: t.textMuted }} />}
             placeholder="Search users..."
             value={searchText}
-            onChange={(e) => setSearchText(e.target.value)}
+            onChange={(e) => handleSearchChange(e.target.value)}
             style={{ width: 260, borderRadius: 8 }}
           />
           <Select
             placeholder="Status"
             allowClear
-            value={statusFilter}
-            onChange={setStatusFilter}
+            value={bannedFilter === undefined ? undefined : bannedFilter ? 'banned' : 'active'}
+            onChange={(val) => {
+              setBannedFilter(val === 'banned' ? true : val === 'active' ? false : undefined);
+              setPage(1);
+            }}
             style={{ width: 140 }}
             options={[
               { value: 'active', label: 'Active' },
-              { value: 'inactive', label: 'Inactive' },
               { value: 'banned', label: 'Banned' },
             ]}
           />
           <Select
-            placeholder="Level"
+            placeholder="Role"
             allowClear
-            value={levelFilter}
-            onChange={setLevelFilter}
+            value={roleFilter}
+            onChange={(val) => {
+              setRoleFilter(val);
+              setPage(1);
+            }}
             style={{ width: 140 }}
             options={[
-              { value: 'beginner', label: 'Beginner' },
-              { value: 'intermediate', label: 'Intermediate' },
-              { value: 'advanced', label: 'Advanced' },
+              { value: 'user', label: 'User' },
+              { value: 'admin', label: 'Admin' },
             ]}
           />
         </Space>
       </Card>
       <Card className="glass-card" style={{ borderRadius: 14 }} styles={{ body: { padding: 0 } }}>
-        <Table
-          columns={columns}
-          dataSource={filteredUsers}
-          rowKey="id"
-          pagination={{
-            pageSize: 10,
-            showSizeChanger: false,
-            showTotal: (total) => <Text style={{ color: t.textMuted }}>{total} users total</Text>,
-          }}
-          size="middle"
-        />
+        <Spin spinning={loading}>
+          <Table
+            columns={columns}
+            dataSource={users}
+            rowKey={(r) => r.user.id}
+            pagination={{
+              current: page,
+              pageSize,
+              total,
+              showSizeChanger: false,
+              onChange: (p) => setPage(p),
+              showTotal: (t2) => <Text style={{ color: t.textMuted }}>{t2} users total</Text>,
+            }}
+            size="middle"
+          />
+        </Spin>
       </Card>
     </div>
   );

@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { Form, Input, Button, Checkbox, Typography, message, Divider } from 'antd';
 import { MailOutlined, LockOutlined, EyeInvisibleOutlined, EyeTwoTone } from '@ant-design/icons';
+import { GoogleLogin } from '@react-oauth/google';
 
 const GoogleIcon = () => (
   <svg width="18" height="18" viewBox="0 0 48 48">
@@ -28,23 +29,84 @@ const GoogleIcon = () => (
 );
 
 import { ROUTES } from '@/lib/constants';
+import { useAppDispatch } from '@/store/hooks';
+import { setCurrentUser } from '@/store/slices/userSlice';
+import { authService } from '@/lib/services/auth';
 import './login.css';
 
 const { Title, Text, Link } = Typography;
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [messageApi, contextHolder] = message.useMessage();
   const router = useRouter();
+  const dispatch = useAppDispatch();
+  const googleBtnRef = useRef<HTMLDivElement>(null);
+
+  const ADMIN_ROLES = ['admin', 'super_admin', 'moderator'];
 
   const handleLogin = async (values: { email: string; password: string; remember: boolean }) => {
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 1500));
-    setLoading(false);
-
-    if (values.email && values.password) {
+    try {
+      const result = await authService.login(values.email, values.password);
+      if (!ADMIN_ROLES.includes(result.user.role)) {
+        messageApi.error('Access denied. This portal is for admins only.');
+        return;
+      }
+      dispatch(
+        setCurrentUser({
+          name: result.user.email.split('@')[0],
+          email: result.user.email,
+          role: result.user.role as 'admin' | 'super_admin' | 'moderator',
+        }),
+      );
       messageApi.success('Welcome back! Redirecting...');
       setTimeout(() => router.push(ROUTES.DASHBOARD), 800);
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+        'Invalid credentials';
+      messageApi.error(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleSuccess = async (idToken: string) => {
+    setGoogleLoading(true);
+    try {
+      const result = await authService.googleSignIn(idToken);
+      if (!ADMIN_ROLES.includes(result.user.role)) {
+        messageApi.error('Access denied. This portal is for admins only.');
+        return;
+      }
+      dispatch(
+        setCurrentUser({
+          name: result.user.email.split('@')[0],
+          email: result.user.email,
+          role: result.user.role as 'admin' | 'super_admin' | 'moderator',
+        }),
+      );
+      messageApi.success('Welcome back! Redirecting...');
+      setTimeout(() => router.push(ROUTES.DASHBOARD), 800);
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+        'Google sign-in failed';
+      messageApi.error(msg);
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
+  // Trigger the hidden GoogleLogin button — uses renderButton popup (no third-party cookies needed)
+  const googleLogin = () => {
+    const btn = googleBtnRef.current?.querySelector<HTMLElement>('[role="button"]');
+    if (btn) {
+      btn.click();
+    } else {
+      messageApi.error('Google Sign-In not ready, please try again');
     }
   };
 
@@ -103,11 +165,28 @@ export default function LoginPage() {
             </Text>
           </div>
 
+          {/* Hidden GoogleLogin — uses renderButton popup (works without third-party cookies) */}
+          <div
+            ref={googleBtnRef}
+            style={{ position: 'absolute', opacity: 0, height: 0, overflow: 'hidden' }}
+          >
+            <GoogleLogin
+              onSuccess={(credentialResponse) => {
+                if (credentialResponse.credential) {
+                  handleGoogleSuccess(credentialResponse.credential);
+                }
+              }}
+              onError={() => messageApi.error('Google sign-in failed')}
+            />
+          </div>
+
           {/* Google login */}
           <Button
             block
             size="large"
             icon={<GoogleIcon />}
+            loading={googleLoading}
+            onClick={() => googleLogin()}
             style={{
               borderRadius: 10,
               height: 48,

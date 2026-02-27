@@ -1,70 +1,92 @@
 'use client';
 
-import { Row, Col, Card, Typography } from 'antd';
-import { UserOutlined, BookOutlined, ReadOutlined, DollarOutlined } from '@ant-design/icons';
+import { useState, useEffect } from 'react';
+import { Row, Col, Card, Typography, Spin, message } from 'antd';
+import { UserOutlined, BookOutlined, WarningOutlined, StopOutlined } from '@ant-design/icons';
 import StatsCard from '@/components/dashboard/StatsCard';
 import RecentActivity from '@/components/dashboard/RecentActivity';
 import PageHeader from '@/components/shared/PageHeader';
 import { useAppSelector } from '@/store/hooks';
 import { getTokens } from '@/lib/theme';
+import { adminService } from '@/lib/services/admin';
 import type { StatsCardData } from '@/types';
 
 const { Title, Text } = Typography;
 
-const statsData: StatsCardData[] = [
-  {
-    title: 'Total Users',
-    value: '12,847',
-    change: 12.5,
-    changeType: 'increase',
-    icon: <UserOutlined />,
-    color: '#6C5CE7',
-  },
-  {
-    title: 'Active Courses',
-    value: '48',
-    change: 8.2,
-    changeType: 'increase',
-    icon: <BookOutlined />,
-    color: '#00B894',
-  },
-  {
-    title: 'Total Lessons',
-    value: '324',
-    change: 15.3,
-    changeType: 'increase',
-    icon: <ReadOutlined />,
-    color: '#74B9FF',
-  },
-  {
-    title: 'Revenue',
-    value: '₹8.4L',
-    change: 3.1,
-    changeType: 'decrease',
-    icon: <DollarOutlined />,
-    color: '#FDCB6E',
-  },
-];
-
 export default function DashboardPage() {
   const mode = useAppSelector((state) => state.theme.mode);
   const t = getTokens(mode);
+  const [loading, setLoading] = useState(true);
+  const [statsData, setStatsData] = useState<StatsCardData[]>([]);
+  const [messageApi, contextHolder] = message.useMessage();
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      setLoading(true);
+      try {
+        const stats = await adminService.getStats();
+        setStatsData([
+          {
+            title: 'Total Users',
+            value: stats.totalUsers.toLocaleString(),
+            change: 0,
+            changeType: 'increase',
+            icon: <UserOutlined />,
+            color: '#6C5CE7',
+          },
+          {
+            title: 'Total Sessions',
+            value: stats.totalSessions.toLocaleString(),
+            change: 0,
+            changeType: 'increase',
+            icon: <BookOutlined />,
+            color: '#00B894',
+          },
+          {
+            title: 'Active Reports',
+            value: stats.activeReports.toLocaleString(),
+            change: 0,
+            changeType: stats.activeReports > 0 ? 'decrease' : 'increase',
+            icon: <WarningOutlined />,
+            color: '#FDCB6E',
+          },
+          {
+            title: 'Banned Users',
+            value: stats.bannedUsers.toLocaleString(),
+            change: 0,
+            changeType: 'decrease',
+            icon: <StopOutlined />,
+            color: '#FF7675',
+          },
+        ]);
+      } catch {
+        messageApi.error('Failed to load dashboard stats');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchStats();
+  }, [messageApi]);
 
   return (
     <div>
+      {contextHolder}
       <PageHeader
         title="Dashboard"
         subtitle="Welcome back! Here's what's happening with your app."
       />
 
       {/* Stats Cards */}
-      <Row gutter={[20, 20]} className="animate-stagger">
-        {statsData.map((stat, index) => (
-          <Col xs={24} sm={12} lg={6} key={index}>
-            <StatsCard data={stat} />
-          </Col>
-        ))}
-      </Row>
+      <Spin spinning={loading}>
+        <Row gutter={[20, 20]} className="animate-stagger">
+          {statsData.map((stat, index) => (
+            <Col xs={24} sm={12} lg={6} key={index}>
+              <StatsCard data={stat} />
+            </Col>
+          ))}
+        </Row>
+      </Spin>
 
       {/* Content Row */}
       <Row gutter={[20, 20]} style={{ marginTop: 28 }}>

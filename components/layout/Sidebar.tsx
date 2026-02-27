@@ -11,6 +11,9 @@ import {
   SettingOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  FlagOutlined,
+  TagOutlined,
+  BellOutlined,
 } from '@ant-design/icons';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { toggleSidebar } from '@/store/slices/sidebarSlice';
@@ -30,6 +33,14 @@ const menuItems = [
   { key: MENU_KEYS.USERS, icon: <UserOutlined />, label: 'Users', path: ROUTES.USERS },
   { key: MENU_KEYS.COURSES, icon: <BookOutlined />, label: 'Courses', path: ROUTES.COURSES },
   { key: MENU_KEYS.LESSONS, icon: <ReadOutlined />, label: 'Lessons', path: ROUTES.LESSONS },
+  { key: MENU_KEYS.REPORTS, icon: <FlagOutlined />, label: 'Reports', path: ROUTES.REPORTS },
+  { key: MENU_KEYS.COUPONS, icon: <TagOutlined />, label: 'Coupons', path: ROUTES.COUPONS },
+  {
+    key: MENU_KEYS.NOTIFICATIONS,
+    icon: <BellOutlined />,
+    label: 'Notifications',
+    path: ROUTES.NOTIFICATIONS,
+  },
   {
     key: MENU_KEYS.ANALYTICS,
     icon: <BarChartOutlined />,

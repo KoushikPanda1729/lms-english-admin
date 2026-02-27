@@ -11,6 +11,9 @@ export const ROUTES = {
   USERS: '/users',
   COURSES: '/courses',
   LESSONS: '/lessons',
+  REPORTS: '/reports',
+  COUPONS: '/coupons',
+  NOTIFICATIONS: '/notifications',
   ANALYTICS: '/analytics',
   SETTINGS: '/settings',
   LOGIN: '/login',
@@ -22,6 +25,9 @@ export const MENU_KEYS = {
   USERS: 'users',
   COURSES: 'courses',
   LESSONS: 'lessons',
+  REPORTS: 'reports',
+  COUPONS: 'coupons',
+  NOTIFICATIONS: 'notifications',
   ANALYTICS: 'analytics',
   SETTINGS: 'settings',
 } as const;
@@ -41,6 +47,9 @@ export const STATUS_COLORS: Record<string, string> = {
   published: '#00B894',
   draft: '#FDCB6E',
   archived: '#9D9DB5',
+  pending: '#FDCB6E',
+  reviewed: '#00B894',
+  dismissed: '#9D9DB5',
 };
 
 // Lesson type colors
