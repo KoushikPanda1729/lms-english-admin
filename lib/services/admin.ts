@@ -9,6 +9,10 @@ export const adminService = {
       totalSessions: number;
       sessionsToday: number;
       activeReports: number;
+      newUsersThisWeek: number;
+      totalCourses: number;
+      publishedCourses: number;
+      avgSessionMinutes: number;
     };
   },
 

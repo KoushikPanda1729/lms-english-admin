@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Card,
   Form,
@@ -14,13 +14,26 @@ import {
   Tag,
   Space,
   Empty,
+  Popconfirm,
+  Tooltip,
 } from 'antd';
-import { BellOutlined, SendOutlined, TeamOutlined, UserOutlined } from '@ant-design/icons';
+import {
+  BellOutlined,
+  SendOutlined,
+  TeamOutlined,
+  UserOutlined,
+  EditOutlined,
+  DeleteOutlined,
+} from '@ant-design/icons';
+import dayjs from 'dayjs';
+import relativeTime from 'dayjs/plugin/relativeTime';
 import PageHeader from '@/components/shared/PageHeader';
 import { useAppSelector } from '@/store/hooks';
 import { getTokens } from '@/lib/theme';
-import { notificationService } from '@/lib/services/notification';
+import { notificationService, type BroadcastRecord } from '@/lib/services/notification';
 import { adminService } from '@/lib/services/admin';
+
+dayjs.extend(relativeTime);
 
 const { Text, Title } = Typography;
 const { TextArea } = Input;
@@ -30,15 +43,6 @@ type TargetType = 'all' | 'user';
 interface UserOption {
   value: string;
   label: string;
-}
-
-interface SentNotification {
-  id: string;
-  title: string;
-  body: string;
-  target: string;
-  sentAt: string;
-  status: 'sent' | 'failed';
 }
 
 const TARGET_OPTIONS = [
@@ -51,12 +55,41 @@ export default function NotificationsPage() {
   const [targetType, setTargetType] = useState<TargetType>('all');
   const [sending, setSending] = useState(false);
   const [messageApi, contextHolder] = message.useMessage();
-  const [sentHistory, setSentHistory] = useState<SentNotification[]>([]);
+  const [history, setHistory] = useState<BroadcastRecord[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [historyTotal, setHistoryTotal] = useState(0);
+  const [historyPage, setHistoryPage] = useState(1);
+  const [deletingKey, setDeletingKey] = useState<string | null>(null);
   const [userOptions, setUserOptions] = useState<UserOption[]>([]);
   const [userSearchLoading, setUserSearchLoading] = useState(false);
   const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const composeRef = useRef<HTMLDivElement>(null);
   const mode = useAppSelector((state) => state.theme.mode);
   const t = getTokens(mode);
+
+  const PAGE_SIZE = 10;
+
+  const fetchHistory = useCallback(
+    async (pg = historyPage) => {
+      setHistoryLoading(true);
+      try {
+        const res = await notificationService.getHistory({ page: pg, limit: PAGE_SIZE });
+        setHistory(res.broadcasts);
+        setHistoryTotal(res.total);
+      } catch {
+        // silent
+      } finally {
+        setHistoryLoading(false);
+      }
+    },
+
+    [historyPage],
+  );
+
+  useEffect(() => {
+    fetchHistory(historyPage);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [historyPage]);
 
   const searchUsers = (query: string) => {
     if (searchDebounce.current) clearTimeout(searchDebounce.current);
@@ -68,12 +101,7 @@ export default function NotificationsPage() {
       setUserSearchLoading(true);
       try {
         const result = await adminService.listUsers({ page: 1, limit: 20, search: query });
-        setUserOptions(
-          result.users.map((u) => ({
-            value: u.user.id,
-            label: u.user.email,
-          })),
-        );
+        setUserOptions(result.users.map((u) => ({ value: u.user.id, label: u.user.email })));
       } catch {
         setUserOptions([]);
       } finally {
@@ -96,37 +124,41 @@ export default function NotificationsPage() {
         title: values.title,
         body: values.body,
       });
-
-      const selectedEmails =
-        values.targetType === 'user' && values.userIds
-          ? values.userIds
-              .map((id) => userOptions.find((o) => o.value === id)?.label ?? id)
-              .join(', ')
-          : null;
-
-      const targetLabel =
-        values.targetType === 'all' ? 'All Users' : `${result.sent} user(s): ${selectedEmails}`;
-
-      setSentHistory((prev) => [
-        {
-          id: Date.now().toString(),
-          title: values.title,
-          body: values.body,
-          target: targetLabel,
-          sentAt: new Date().toISOString(),
-          status: 'sent',
-        },
-        ...prev,
-      ]);
-
       messageApi.success(`Notification sent to ${result.sent} user(s)`);
       form.resetFields();
       setTargetType('all');
       setUserOptions([]);
+      // Refresh history from page 1
+      setHistoryPage(1);
+      fetchHistory(1);
     } catch {
       messageApi.error('Failed to send notification');
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleEdit = (record: BroadcastRecord) => {
+    form.setFieldsValue({ title: record.title, body: record.body, targetType: 'all' });
+    setTargetType('all');
+    composeRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const handleDelete = async (record: BroadcastRecord) => {
+    const key = record.sentAt;
+    setDeletingKey(key);
+    try {
+      await notificationService.deleteBroadcast({
+        title: record.title,
+        body: record.body,
+        sentAt: record.sentAt,
+      });
+      messageApi.success('Broadcast deleted');
+      fetchHistory(historyPage);
+    } catch {
+      messageApi.error('Failed to delete broadcast');
+    } finally {
+      setDeletingKey(null);
     }
   };
 
@@ -152,24 +184,20 @@ export default function NotificationsPage() {
       ),
     },
     {
-      title: 'Target',
-      dataIndex: 'target',
-      key: 'target',
-      render: (v: string) => (
+      title: 'Recipients',
+      dataIndex: 'recipientCount',
+      key: 'recipientCount',
+      width: 110,
+      render: (v: number) => (
         <Tag
           style={{
             background: 'rgba(108, 92, 231, 0.1)',
             color: '#6C5CE7',
             border: '1px solid rgba(108, 92, 231, 0.2)',
             borderRadius: 6,
-            maxWidth: 260,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
           }}
-          title={v}
         >
-          {v}
+          {v.toLocaleString()} user{v !== 1 ? 's' : ''}
         </Tag>
       ),
     },
@@ -177,21 +205,45 @@ export default function NotificationsPage() {
       title: 'Sent At',
       dataIndex: 'sentAt',
       key: 'sentAt',
+      width: 160,
       render: (v: string) => (
-        <Text style={{ color: t.textMuted, fontSize: 13 }}>{new Date(v).toLocaleString()}</Text>
+        <Tooltip title={dayjs(v).format('DD MMM YYYY, HH:mm')}>
+          <Text style={{ color: t.textMuted, fontSize: 13 }}>{dayjs(v).fromNow()}</Text>
+        </Tooltip>
       ),
     },
     {
-      title: 'Status',
-      dataIndex: 'status',
-      key: 'status',
-      render: (v: string) => (
-        <Tag
-          color={v === 'sent' ? 'success' : 'error'}
-          style={{ borderRadius: 6, textTransform: 'capitalize' }}
-        >
-          {v}
-        </Tag>
+      title: '',
+      key: 'actions',
+      width: 90,
+      render: (_: unknown, record: BroadcastRecord) => (
+        <Space size={6}>
+          <Tooltip title="Edit & resend">
+            <Button
+              size="small"
+              icon={<EditOutlined />}
+              style={{ borderRadius: 6 }}
+              onClick={() => handleEdit(record)}
+            />
+          </Tooltip>
+          <Popconfirm
+            title="Delete this broadcast?"
+            description="This removes the notification from all recipients' history."
+            onConfirm={() => handleDelete(record)}
+            okText="Delete"
+            okButtonProps={{ danger: true }}
+          >
+            <Tooltip title="Delete broadcast">
+              <Button
+                size="small"
+                danger
+                icon={<DeleteOutlined />}
+                style={{ borderRadius: 6 }}
+                loading={deletingKey === record.sentAt}
+              />
+            </Tooltip>
+          </Popconfirm>
+        </Space>
       ),
     },
   ];
@@ -202,177 +254,173 @@ export default function NotificationsPage() {
       <PageHeader title="Notifications" subtitle="Send push notifications to your users" />
 
       {/* Compose Card */}
-      <Card
-        className="glass-card"
-        style={{ borderRadius: 14, marginBottom: 24 }}
-        styles={{ body: { padding: '28px 32px' } }}
-      >
-        <Space align="center" style={{ marginBottom: 20 }}>
-          <div
-            style={{
-              width: 40,
-              height: 40,
-              borderRadius: 10,
-              background: 'linear-gradient(135deg, #6C5CE7 0%, #A29BFE 100%)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <BellOutlined style={{ color: '#fff', fontSize: 18 }} />
-          </div>
-          <div>
-            <Title level={5} style={{ margin: 0, color: t.textPrimary }}>
-              Compose Notification
-            </Title>
-            <Text style={{ color: t.textMuted, fontSize: 13 }}>
-              Fill in the details and choose who should receive this notification
-            </Text>
-          </div>
-        </Space>
-
-        <Form
-          form={form}
-          layout="vertical"
-          onFinish={handleSend}
-          initialValues={{ targetType: 'all' }}
+      <div ref={composeRef}>
+        <Card
+          className="glass-card"
+          style={{ borderRadius: 14, marginBottom: 24 }}
+          styles={{ body: { padding: '28px 32px' } }}
         >
-          {/* Target type */}
-          <Form.Item
-            name="targetType"
-            label={
-              <Text strong style={{ color: t.textSecondary }}>
-                Send To
-              </Text>
-            }
-          >
-            <Radio.Group
-              onChange={(e) => {
-                setTargetType(e.target.value);
-                form.resetFields(['userIds']);
-                setUserOptions([]);
+          <Space align="center" style={{ marginBottom: 20 }}>
+            <div
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 10,
+                background: 'linear-gradient(135deg, #6C5CE7 0%, #A29BFE 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
               }}
-              style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}
             >
-              {TARGET_OPTIONS.map((opt) => (
-                <Radio.Button
-                  key={opt.value}
-                  value={opt.value}
-                  style={{
-                    borderRadius: 10,
-                    height: 'auto',
-                    padding: '10px 18px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    borderColor: targetType === opt.value ? '#6C5CE7' : undefined,
-                  }}
-                >
-                  <Space size={6}>
-                    {opt.icon}
-                    <span>{opt.label}</span>
-                  </Space>
-                </Radio.Button>
-              ))}
-            </Radio.Group>
-          </Form.Item>
+              <BellOutlined style={{ color: '#fff', fontSize: 18 }} />
+            </div>
+            <div>
+              <Title level={5} style={{ margin: 0, color: t.textPrimary }}>
+                Compose Notification
+              </Title>
+              <Text style={{ color: t.textMuted, fontSize: 13 }}>
+                Fill in the details and choose who should receive this notification
+              </Text>
+            </div>
+          </Space>
 
-          {/* Specific users — searchable multi-select with checkboxes */}
-          {targetType === 'user' && (
+          <Form
+            form={form}
+            layout="vertical"
+            onFinish={handleSend}
+            initialValues={{ targetType: 'all' }}
+          >
+            {/* Target type */}
             <Form.Item
-              name="userIds"
+              name="targetType"
               label={
                 <Text strong style={{ color: t.textSecondary }}>
-                  Select Users
+                  Send To
                 </Text>
               }
-              rules={[{ required: true, message: 'Select at least one user' }]}
             >
-              <Select
-                mode="multiple"
-                allowClear
-                showSearch
-                filterOption={false}
-                onSearch={searchUsers}
-                loading={userSearchLoading}
-                options={userOptions}
-                placeholder="Search by email to find users..."
-                notFoundContent={
-                  userSearchLoading ? (
-                    <Text style={{ color: t.textMuted, padding: '8px 12px', display: 'block' }}>
-                      Searching...
-                    </Text>
-                  ) : (
-                    <Text style={{ color: t.textMuted, padding: '8px 12px', display: 'block' }}>
-                      Type to search users
-                    </Text>
-                  )
+              <Radio.Group
+                onChange={(e) => {
+                  setTargetType(e.target.value);
+                  form.resetFields(['userIds']);
+                  setUserOptions([]);
+                }}
+                style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}
+              >
+                {TARGET_OPTIONS.map((opt) => (
+                  <Radio.Button
+                    key={opt.value}
+                    value={opt.value}
+                    style={{
+                      borderRadius: 10,
+                      height: 'auto',
+                      padding: '10px 18px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      borderColor: targetType === opt.value ? '#6C5CE7' : undefined,
+                    }}
+                  >
+                    <Space size={6}>
+                      {opt.icon}
+                      <span>{opt.label}</span>
+                    </Space>
+                  </Radio.Button>
+                ))}
+              </Radio.Group>
+            </Form.Item>
+
+            {/* Specific users */}
+            {targetType === 'user' && (
+              <Form.Item
+                name="userIds"
+                label={
+                  <Text strong style={{ color: t.textSecondary }}>
+                    Select Users
+                  </Text>
                 }
-                style={{ width: '100%', minHeight: 44 }}
-                maxTagCount="responsive"
+                rules={[{ required: true, message: 'Select at least one user' }]}
+              >
+                <Select
+                  mode="multiple"
+                  allowClear
+                  showSearch
+                  filterOption={false}
+                  onSearch={searchUsers}
+                  loading={userSearchLoading}
+                  options={userOptions}
+                  placeholder="Search by email to find users..."
+                  notFoundContent={
+                    <Text style={{ color: t.textMuted, padding: '8px 12px', display: 'block' }}>
+                      {userSearchLoading ? 'Searching...' : 'Type to search users'}
+                    </Text>
+                  }
+                  style={{ width: '100%', minHeight: 44 }}
+                  maxTagCount="responsive"
+                />
+              </Form.Item>
+            )}
+
+            {/* Title */}
+            <Form.Item
+              name="title"
+              label={
+                <Text strong style={{ color: t.textSecondary }}>
+                  Notification Title
+                </Text>
+              }
+              rules={[{ required: true, message: 'Title is required' }]}
+            >
+              <Input
+                placeholder="e.g. New course available!"
+                maxLength={100}
+                showCount
+                style={{ borderRadius: 10, height: 44 }}
               />
             </Form.Item>
-          )}
 
-          {/* Title */}
-          <Form.Item
-            name="title"
-            label={
-              <Text strong style={{ color: t.textSecondary }}>
-                Notification Title
-              </Text>
-            }
-            rules={[{ required: true, message: 'Title is required' }]}
-          >
-            <Input
-              placeholder="e.g. New course available!"
-              maxLength={100}
-              showCount
-              style={{ borderRadius: 10, height: 44 }}
-            />
-          </Form.Item>
-
-          {/* Body */}
-          <Form.Item
-            name="body"
-            label={
-              <Text strong style={{ color: t.textSecondary }}>
-                Message
-              </Text>
-            }
-            rules={[{ required: true, message: 'Message is required' }]}
-          >
-            <TextArea
-              placeholder="Write your notification message here..."
-              maxLength={300}
-              showCount
-              rows={4}
-              style={{ borderRadius: 10, resize: 'none' }}
-            />
-          </Form.Item>
-
-          <Form.Item style={{ marginBottom: 0 }}>
-            <Button
-              type="primary"
-              htmlType="submit"
-              loading={sending}
-              icon={<SendOutlined />}
-              style={{
-                height: 46,
-                paddingInline: 32,
-                borderRadius: 10,
-                fontSize: 15,
-                fontWeight: 600,
-                background: 'linear-gradient(135deg, #6C5CE7 0%, #A29BFE 100%)',
-                border: 'none',
-                boxShadow: '0 6px 20px rgba(108, 92, 231, 0.35)',
-              }}
+            {/* Body */}
+            <Form.Item
+              name="body"
+              label={
+                <Text strong style={{ color: t.textSecondary }}>
+                  Message
+                </Text>
+              }
+              rules={[{ required: true, message: 'Message is required' }]}
             >
-              Send Notification
-            </Button>
-          </Form.Item>
-        </Form>
-      </Card>
+              <TextArea
+                placeholder="Write your notification message here..."
+                maxLength={300}
+                showCount
+                rows={4}
+                style={{ borderRadius: 10, resize: 'none' }}
+              />
+            </Form.Item>
+
+            <Form.Item style={{ marginBottom: 0 }}>
+              <Button
+                type="primary"
+                htmlType="submit"
+                loading={sending}
+                icon={<SendOutlined />}
+                style={{
+                  height: 46,
+                  paddingInline: 32,
+                  borderRadius: 10,
+                  fontSize: 15,
+                  fontWeight: 600,
+                  background: 'linear-gradient(135deg, #6C5CE7 0%, #A29BFE 100%)',
+                  border: 'none',
+                  boxShadow: '0 6px 20px rgba(108, 92, 231, 0.35)',
+                }}
+              >
+                Send Notification
+              </Button>
+            </Form.Item>
+          </Form>
+        </Card>
+      </div>
 
       {/* Sent History */}
       <Card
@@ -385,7 +433,7 @@ export default function NotificationsPage() {
           </Text>
         }
       >
-        {sentHistory.length === 0 ? (
+        {!historyLoading && history.length === 0 ? (
           <div style={{ padding: '48px 0' }}>
             <Empty
               image={Empty.PRESENTED_IMAGE_SIMPLE}
@@ -395,9 +443,17 @@ export default function NotificationsPage() {
         ) : (
           <Table
             columns={columns}
-            dataSource={sentHistory}
-            rowKey="id"
-            pagination={false}
+            dataSource={history}
+            rowKey={(r) => `${r.title}-${r.sentAt}`}
+            loading={historyLoading}
+            pagination={{
+              current: historyPage,
+              pageSize: PAGE_SIZE,
+              total: historyTotal,
+              onChange: setHistoryPage,
+              showTotal: (t) => `${t} broadcasts`,
+              style: { padding: '12px 20px' },
+            }}
             size="middle"
           />
         )}

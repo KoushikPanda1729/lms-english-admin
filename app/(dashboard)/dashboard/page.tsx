@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Row, Col, Card, Typography, Spin, message } from 'antd';
+import { Row, Col, Card, Typography, Spin, message, Skeleton } from 'antd';
 import { UserOutlined, BookOutlined, WarningOutlined, StopOutlined } from '@ant-design/icons';
 import StatsCard from '@/components/dashboard/StatsCard';
 import RecentActivity from '@/components/dashboard/RecentActivity';
@@ -13,11 +13,17 @@ import type { StatsCardData } from '@/types';
 
 const { Title, Text } = Typography;
 
+interface OverviewItem {
+  label: string;
+  value: string;
+}
+
 export default function DashboardPage() {
   const mode = useAppSelector((state) => state.theme.mode);
   const t = getTokens(mode);
   const [loading, setLoading] = useState(true);
   const [statsData, setStatsData] = useState<StatsCardData[]>([]);
+  const [overviewItems, setOverviewItems] = useState<OverviewItem[]>([]);
   const [messageApi, contextHolder] = message.useMessage();
 
   useEffect(() => {
@@ -58,6 +64,13 @@ export default function DashboardPage() {
             icon: <StopOutlined />,
             color: '#FF7675',
           },
+        ]);
+        setOverviewItems([
+          { label: 'Sessions Today', value: stats.sessionsToday.toLocaleString() },
+          { label: 'New This Week', value: stats.newUsersThisWeek.toLocaleString() },
+          { label: 'Avg. Session', value: `${stats.avgSessionMinutes} min` },
+          { label: 'Total Courses', value: stats.totalCourses.toLocaleString() },
+          { label: 'Published Courses', value: stats.publishedCourses.toLocaleString() },
         ]);
       } catch {
         messageApi.error('Failed to load dashboard stats');
@@ -123,32 +136,27 @@ export default function DashboardPage() {
               Quick Overview
             </Title>
 
-            {[
-              { label: 'Active Today', value: '1,284', pct: '10%' },
-              { label: 'New This Week', value: '342', pct: '2.7%' },
-              { label: 'Avg. Session', value: '18 min', pct: '5.2%' },
-              { label: 'Completion Rate', value: '73%', pct: '1.8%' },
-              { label: 'Lessons/User', value: '4.2', pct: '3.5%' },
-            ].map((item, i) => (
-              <div
-                key={i}
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  padding: '14px 0',
-                  borderBottom: i < 4 ? `1px solid ${t.border}` : 'none',
-                }}
-              >
-                <Text style={{ color: t.textSecondary, fontSize: 14 }}>{item.label}</Text>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {loading ? (
+              <Skeleton active paragraph={{ rows: 5 }} title={false} />
+            ) : (
+              overviewItems.map((item, i) => (
+                <div
+                  key={i}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '14px 0',
+                    borderBottom: i < overviewItems.length - 1 ? `1px solid ${t.border}` : 'none',
+                  }}
+                >
+                  <Text style={{ color: t.textSecondary, fontSize: 14 }}>{item.label}</Text>
                   <Text strong style={{ color: t.textPrimary, fontSize: 15 }}>
                     {item.value}
                   </Text>
-                  <Text style={{ color: '#00B894', fontSize: 12 }}>+{item.pct}</Text>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </Card>
         </Col>
       </Row>

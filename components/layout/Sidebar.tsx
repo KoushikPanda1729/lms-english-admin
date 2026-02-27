@@ -6,6 +6,7 @@ import {
   DashboardOutlined,
   UserOutlined,
   BookOutlined,
+  PhoneOutlined,
   BarChartOutlined,
   SettingOutlined,
   MenuFoldOutlined,
@@ -31,6 +32,7 @@ const menuItems = [
   },
   { key: MENU_KEYS.USERS, icon: <UserOutlined />, label: 'Users', path: ROUTES.USERS },
   { key: MENU_KEYS.COURSES, icon: <BookOutlined />, label: 'Courses', path: ROUTES.COURSES },
+  { key: MENU_KEYS.SESSIONS, icon: <PhoneOutlined />, label: 'Sessions', path: ROUTES.SESSIONS },
   { key: MENU_KEYS.REPORTS, icon: <FlagOutlined />, label: 'Reports', path: ROUTES.REPORTS },
   { key: MENU_KEYS.COUPONS, icon: <TagOutlined />, label: 'Coupons', path: ROUTES.COUPONS },
   {
