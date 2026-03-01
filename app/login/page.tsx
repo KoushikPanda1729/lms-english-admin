@@ -122,12 +122,17 @@ function LoginContent() {
 
   // Trigger the hidden GoogleLogin button — uses renderButton popup (no third-party cookies needed)
   const googleLogin = () => {
-    const btn = googleBtnRef.current?.querySelector<HTMLElement>('[role="button"]');
-    if (btn) {
-      btn.click();
-    } else {
-      messageApi.error('Google Sign-In not ready, please try again');
-    }
+    const tryClick = (attempts: number) => {
+      const btn = googleBtnRef.current?.querySelector<HTMLElement>('[role="button"]');
+      if (btn) {
+        btn.click();
+      } else if (attempts > 0) {
+        setTimeout(() => tryClick(attempts - 1), 150);
+      } else {
+        messageApi.error('Google Sign-In not ready, please try again');
+      }
+    };
+    tryClick(8);
   };
 
   if (checking) {
@@ -201,10 +206,7 @@ function LoginContent() {
           </div>
 
           {/* Hidden GoogleLogin — uses renderButton popup (works without third-party cookies) */}
-          <div
-            ref={googleBtnRef}
-            style={{ position: 'absolute', opacity: 0, height: 0, overflow: 'hidden' }}
-          >
+          <div ref={googleBtnRef} style={{ position: 'fixed', top: '-9999px', left: '-9999px' }}>
             <GoogleLogin
               onSuccess={(credentialResponse) => {
                 if (credentialResponse.credential) {
