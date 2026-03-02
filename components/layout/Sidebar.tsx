@@ -14,7 +14,11 @@ import {
   FlagOutlined,
   TagOutlined,
   BellOutlined,
+  CustomerServiceOutlined,
 } from '@ant-design/icons';
+import { Badge } from 'antd';
+import { useEffect, useState } from 'react';
+import { supportService } from '@/lib/services/support';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { toggleSidebar } from '@/store/slices/sidebarSlice';
 import { getTokens } from '@/lib/theme';
@@ -47,6 +51,12 @@ const menuItems = [
     label: 'Analytics',
     path: ROUTES.ANALYTICS,
   },
+  {
+    key: MENU_KEYS.SUPPORT,
+    icon: <CustomerServiceOutlined />,
+    label: 'Support',
+    path: ROUTES.SUPPORT,
+  },
   { key: MENU_KEYS.SETTINGS, icon: <SettingOutlined />, label: 'Settings', path: ROUTES.SETTINGS },
 ];
 
@@ -57,6 +67,20 @@ export default function Sidebar() {
   const collapsed = useAppSelector((state) => state.sidebar.collapsed);
   const mode = useAppSelector((state) => state.theme.mode);
   const t = getTokens(mode);
+  const [supportUnread, setSupportUnread] = useState(0);
+
+  // Poll unread support count every 15s
+  useEffect(() => {
+    const fetchUnread = () => {
+      supportService
+        .getTotalUnread()
+        .then(setSupportUnread)
+        .catch(() => {});
+    };
+    fetchUnread();
+    const id = setInterval(fetchUnread, 15000);
+    return () => clearInterval(id);
+  }, []);
 
   const activeKey =
     menuItems.find((item) => pathname.startsWith(item.path))?.key || MENU_KEYS.DASHBOARD;
@@ -125,8 +149,25 @@ export default function Sidebar() {
         selectedKeys={[activeKey]}
         items={menuItems.map((item) => ({
           key: item.key,
-          icon: item.icon,
-          label: item.label,
+          icon:
+            item.key === MENU_KEYS.SUPPORT && supportUnread > 0 ? (
+              <Badge count={supportUnread} size="small" offset={[4, 0]}>
+                {item.icon}
+              </Badge>
+            ) : (
+              item.icon
+            ),
+          label:
+            item.key === MENU_KEYS.SUPPORT && supportUnread > 0 && !collapsed ? (
+              <span
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+              >
+                {item.label}
+                <Badge count={supportUnread} size="small" style={{ backgroundColor: '#6C5CE7' }} />
+              </span>
+            ) : (
+              item.label
+            ),
         }))}
         onClick={({ key }) => {
           const item = menuItems.find((m) => m.key === key);

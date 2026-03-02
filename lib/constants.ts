@@ -17,6 +17,7 @@ export const ROUTES = {
   NOTIFICATIONS: '/notifications',
   ANALYTICS: '/analytics',
   SETTINGS: '/settings',
+  SUPPORT: '/support',
   LOGIN: '/login',
 } as const;
 
@@ -32,6 +33,7 @@ export const MENU_KEYS = {
   NOTIFICATIONS: 'notifications',
   ANALYTICS: 'analytics',
   SETTINGS: 'settings',
+  SUPPORT: 'support',
 } as const;
 
 // Level colors
