@@ -1,11 +1,11 @@
 'use client';
 
-import { useRef, useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import { Form, Input, Button, Checkbox, Typography, message, Divider, Spin } from 'antd';
 import { MailOutlined, LockOutlined, EyeInvisibleOutlined, EyeTwoTone } from '@ant-design/icons';
-import { GoogleLogin } from '@react-oauth/google';
+import { useGoogleLogin } from '@react-oauth/google';
 
 const GoogleIcon = () => (
   <svg width="18" height="18" viewBox="0 0 48 48">
@@ -46,7 +46,6 @@ function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const dispatch = useAppDispatch();
-  const googleBtnRef = useRef<HTMLDivElement>(null);
 
   const redirectTo = searchParams.get('redirect') || ROUTES.DASHBOARD;
 
@@ -93,10 +92,10 @@ function LoginContent() {
     }
   };
 
-  const handleGoogleSuccess = async (idToken: string) => {
+  const handleGoogleSuccess = async (accessToken: string) => {
     setGoogleLoading(true);
     try {
-      const result = await authService.googleSignIn(idToken);
+      const result = await authService.googleSignIn(accessToken);
       if (!ADMIN_ROLES.includes(result.user.role)) {
         messageApi.error('Access denied. This portal is for admins only.');
         return;
@@ -120,20 +119,10 @@ function LoginContent() {
     }
   };
 
-  // Trigger the hidden GoogleLogin button — uses renderButton popup (no third-party cookies needed)
-  const googleLogin = () => {
-    const tryClick = (attempts: number) => {
-      const btn = googleBtnRef.current?.querySelector<HTMLElement>('[role="button"]');
-      if (btn) {
-        btn.click();
-      } else if (attempts > 0) {
-        setTimeout(() => tryClick(attempts - 1), 150);
-      } else {
-        messageApi.error('Google Sign-In not ready, please try again');
-      }
-    };
-    tryClick(8);
-  };
+  const googleLogin = useGoogleLogin({
+    onSuccess: (res) => handleGoogleSuccess(res.access_token),
+    onError: () => messageApi.error('Google sign-in failed'),
+  });
 
   if (checking) {
     return (
@@ -203,18 +192,6 @@ function LoginContent() {
             >
               Enter your credentials to access the admin dashboard
             </Text>
-          </div>
-
-          {/* Hidden GoogleLogin — uses renderButton popup (works without third-party cookies) */}
-          <div ref={googleBtnRef} style={{ position: 'fixed', top: '-9999px', left: '-9999px' }}>
-            <GoogleLogin
-              onSuccess={(credentialResponse) => {
-                if (credentialResponse.credential) {
-                  handleGoogleSuccess(credentialResponse.credential);
-                }
-              }}
-              onError={() => messageApi.error('Google sign-in failed')}
-            />
           </div>
 
           {/* Google login */}

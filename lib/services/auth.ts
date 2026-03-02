@@ -14,9 +14,9 @@ export const authService = {
     return data.data as { id: string; email: string; role: string };
   },
 
-  async googleSignIn(idToken: string) {
+  async googleSignIn(accessToken: string) {
     const { data } = await api.post('/auth/google', {
-      idToken,
+      accessToken,
       deviceId: 'web',
       platform: 'web',
     });
