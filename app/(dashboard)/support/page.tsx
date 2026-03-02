@@ -29,9 +29,14 @@ export default function SupportPage() {
   const [loadingConvs, setLoadingConvs] = useState(true);
   const [loadingMsgs, setLoadingMsgs] = useState(false);
 
+  // WhatsApp-style indicators
+  const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set());
+  const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
+
   const socketRef = useRef<Socket | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const selectedUserIdRef = useRef<string | null>(null);
+  const adminTypingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Keep ref in sync so socket callbacks always have the latest value
   useEffect(() => {
@@ -63,6 +68,9 @@ export default function SupportPage() {
 
     socket.off('support_new_message');
     socket.off('support_read');
+    socket.off('support_user_typing');
+    socket.off('support_user_status');
+    socket.off('support_initial_online_users');
 
     // New message from any user (or admin echo)
     socket.on(
@@ -97,7 +105,6 @@ export default function SupportPage() {
           if (idx >= 0) {
             const next = [...prev];
             next[idx] = updated;
-            // Move to top
             next.splice(idx, 1);
             return [updated, ...next];
           }
@@ -126,11 +133,39 @@ export default function SupportPage() {
       );
     });
 
+    // User is typing / stopped typing
+    socket.on('support_user_typing', ({ userId, typing }: { userId: string; typing: boolean }) => {
+      setTypingUsers((prev) => {
+        const next = new Set(prev);
+        if (typing) next.add(userId);
+        else next.delete(userId);
+        return next;
+      });
+    });
+
+    // User came online or went offline
+    socket.on('support_user_status', ({ userId, online }: { userId: string; online: boolean }) => {
+      setOnlineUsers((prev) => {
+        const next = new Set(prev);
+        if (online) next.add(userId);
+        else next.delete(userId);
+        return next;
+      });
+    });
+
+    // Initial list of online users when admin socket connects
+    socket.on('support_initial_online_users', ({ userIds }: { userIds: string[] }) => {
+      setOnlineUsers(new Set(userIds));
+    });
+
     if (!socket.connected) socket.connect();
 
     return () => {
       socket.off('support_new_message');
       socket.off('support_read');
+      socket.off('support_user_typing');
+      socket.off('support_user_status');
+      socket.off('support_initial_online_users');
       disconnectAdminSocket();
     };
   }, []);
@@ -141,7 +176,7 @@ export default function SupportPage() {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, [messages, typingUsers]);
 
   // ── Select a user / open thread ───────────────────────────────────────────
 
@@ -149,6 +184,12 @@ export default function SupportPage() {
     // Leave previous room
     if (selectedUserIdRef.current && selectedUserIdRef.current !== userId) {
       socketRef.current?.emit('admin_support_leave', { userId: selectedUserIdRef.current });
+      // Stop typing timer for previous user
+      if (adminTypingTimerRef.current) clearTimeout(adminTypingTimerRef.current);
+      socketRef.current?.emit('admin_support_typing', {
+        userId: selectedUserIdRef.current,
+        typing: false,
+      });
     }
 
     setSelectedUserId(userId);
@@ -158,7 +199,7 @@ export default function SupportPage() {
     try {
       const data = await supportService.getConversation(userId);
       setMessages(
-        data.map((m) => ({
+        data.map((m: SupportMsg) => ({
           id: m.id,
           text: m.text,
           fromAdmin: m.fromAdmin,
@@ -185,6 +226,10 @@ export default function SupportPage() {
   const sendReply = useCallback(() => {
     if (!input.trim() || !selectedUserId || !socketRef.current?.connected) return;
 
+    // Stop admin typing indicator before sending
+    if (adminTypingTimerRef.current) clearTimeout(adminTypingTimerRef.current);
+    socketRef.current.emit('admin_support_typing', { userId: selectedUserId, typing: false });
+
     const tempId = `temp-${Date.now()}`;
     setMessages((prev) => [
       ...prev,
@@ -204,6 +249,24 @@ export default function SupportPage() {
     setInput('');
   }, [input, selectedUserId]);
 
+  // ── Admin typing emit (debounced) ─────────────────────────────────────────
+
+  const handleInputChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      setInput(e.target.value);
+      if (!selectedUserId || !socketRef.current?.connected) return;
+      if (!e.target.value.trim()) return;
+
+      socketRef.current.emit('admin_support_typing', { userId: selectedUserId, typing: true });
+
+      if (adminTypingTimerRef.current) clearTimeout(adminTypingTimerRef.current);
+      adminTypingTimerRef.current = setTimeout(() => {
+        socketRef.current?.emit('admin_support_typing', { userId: selectedUserId, typing: false });
+      }, 2000);
+    },
+    [selectedUserId],
+  );
+
   // ── Format time ──────────────────────────────────────────────────────────
 
   const fmtTime = (iso: string) => {
@@ -216,6 +279,8 @@ export default function SupportPage() {
   };
 
   const totalUnread = conversations.reduce((s, c) => s + c.unreadCount, 0);
+
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div style={{ height: 'calc(100vh - 64px)', display: 'flex', flexDirection: 'column' }}>
@@ -287,6 +352,7 @@ export default function SupportPage() {
                   }
                 }}
               >
+                {/* Avatar with online dot */}
                 <div style={{ position: 'relative', flexShrink: 0 }}>
                   <Avatar
                     src={conv.avatarUrl || undefined}
@@ -294,6 +360,7 @@ export default function SupportPage() {
                     size={44}
                     style={{ background: '#a29bfe' }}
                   />
+                  {/* Unread badge */}
                   {conv.unreadCount > 0 && (
                     <span
                       style={{
@@ -317,7 +384,23 @@ export default function SupportPage() {
                       {conv.unreadCount > 9 ? '9+' : conv.unreadCount}
                     </span>
                   )}
+                  {/* Online green dot */}
+                  {onlineUsers.has(conv.userId) && conv.unreadCount === 0 && (
+                    <span
+                      style={{
+                        position: 'absolute',
+                        bottom: 1,
+                        right: 1,
+                        width: 10,
+                        height: 10,
+                        borderRadius: '50%',
+                        background: '#22c55e',
+                        border: `2px solid ${t.bgCard}`,
+                      }}
+                    />
+                  )}
                 </div>
+
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6 }}>
                     <Text
@@ -337,19 +420,33 @@ export default function SupportPage() {
                       {fmtTime(conv.lastMessageAt)}
                     </Text>
                   </div>
-                  <Text
-                    style={{
-                      color: conv.unreadCount > 0 ? t.textPrimary : t.textSecondary,
-                      fontSize: 12,
-                      fontWeight: conv.unreadCount > 0 ? 500 : 400,
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      display: 'block',
-                    }}
-                  >
-                    {conv.lastMessage}
-                  </Text>
+                  {/* Typing indicator in list */}
+                  {typingUsers.has(conv.userId) ? (
+                    <Text
+                      style={{
+                        color: '#6C5CE7',
+                        fontSize: 12,
+                        fontStyle: 'italic',
+                        display: 'block',
+                      }}
+                    >
+                      typing...
+                    </Text>
+                  ) : (
+                    <Text
+                      style={{
+                        color: conv.unreadCount > 0 ? t.textPrimary : t.textSecondary,
+                        fontSize: 12,
+                        fontWeight: conv.unreadCount > 0 ? 500 : 400,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        display: 'block',
+                      }}
+                    >
+                      {conv.lastMessage}
+                    </Text>
+                  )}
                 </div>
               </div>
             ))
@@ -389,16 +486,44 @@ export default function SupportPage() {
                   const conv = conversations.find((c) => c.userId === selectedUserId);
                   return conv ? (
                     <>
-                      <Avatar
-                        src={conv.avatarUrl || undefined}
-                        icon={!conv.avatarUrl ? <UserOutlined /> : undefined}
-                        size={36}
-                        style={{ background: '#a29bfe' }}
-                      />
+                      <div style={{ position: 'relative' }}>
+                        <Avatar
+                          src={conv.avatarUrl || undefined}
+                          icon={!conv.avatarUrl ? <UserOutlined /> : undefined}
+                          size={36}
+                          style={{ background: '#a29bfe' }}
+                        />
+                        {onlineUsers.has(conv.userId) && (
+                          <span
+                            style={{
+                              position: 'absolute',
+                              bottom: 0,
+                              right: 0,
+                              width: 10,
+                              height: 10,
+                              borderRadius: '50%',
+                              background: '#22c55e',
+                              border: `2px solid ${t.bgCard}`,
+                            }}
+                          />
+                        )}
+                      </div>
                       <div>
-                        <Text strong style={{ color: t.textPrimary, fontSize: 14 }}>
+                        <Text
+                          strong
+                          style={{ color: t.textPrimary, fontSize: 14, display: 'block' }}
+                        >
                           {conv.displayName}
                         </Text>
+                        {typingUsers.has(selectedUserId) ? (
+                          <Text style={{ fontSize: 11, color: '#6C5CE7', fontStyle: 'italic' }}>
+                            typing...
+                          </Text>
+                        ) : onlineUsers.has(conv.userId) ? (
+                          <Text style={{ fontSize: 11, color: '#22c55e' }}>● Online</Text>
+                        ) : (
+                          <Text style={{ fontSize: 11, color: t.textSecondary }}>● Offline</Text>
+                        )}
                       </div>
                     </>
                   ) : null;
@@ -428,44 +553,85 @@ export default function SupportPage() {
                     image={Empty.PRESENTED_IMAGE_SIMPLE}
                   />
                 ) : (
-                  messages.map((msg) => (
-                    <div
-                      key={msg.id}
-                      style={{
-                        display: 'flex',
-                        justifyContent: msg.fromAdmin ? 'flex-end' : 'flex-start',
-                      }}
-                    >
+                  <>
+                    {messages.map((msg) => (
                       <div
+                        key={msg.id}
                         style={{
-                          maxWidth: '70%',
-                          padding: '10px 14px',
-                          borderRadius: msg.fromAdmin ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
-                          background: msg.fromAdmin
-                            ? 'linear-gradient(135deg,#6C5CE7,#a29bfe)'
-                            : mode === 'dark'
-                              ? '#2d2d3d'
-                              : '#f0f0f7',
-                          color: msg.fromAdmin ? '#fff' : t.textPrimary,
-                          fontSize: 13,
-                          lineHeight: 1.5,
-                          boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
+                          display: 'flex',
+                          justifyContent: msg.fromAdmin ? 'flex-end' : 'flex-start',
                         }}
                       >
-                        <div>{msg.text}</div>
                         <div
                           style={{
-                            fontSize: 10,
-                            marginTop: 4,
-                            opacity: 0.65,
-                            textAlign: 'right',
+                            maxWidth: '70%',
+                            padding: '10px 14px',
+                            borderRadius: msg.fromAdmin
+                              ? '18px 18px 4px 18px'
+                              : '18px 18px 18px 4px',
+                            background: msg.fromAdmin
+                              ? 'linear-gradient(135deg,#6C5CE7,#a29bfe)'
+                              : mode === 'dark'
+                                ? '#2d2d3d'
+                                : '#f0f0f7',
+                            color: msg.fromAdmin ? '#fff' : t.textPrimary,
+                            fontSize: 13,
+                            lineHeight: 1.5,
+                            boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
                           }}
                         >
-                          {fmtTime(msg.createdAt)}
+                          <div>{msg.text}</div>
+                          <div
+                            style={{
+                              fontSize: 10,
+                              marginTop: 4,
+                              opacity: 0.65,
+                              textAlign: 'right',
+                            }}
+                          >
+                            {fmtTime(msg.createdAt)}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))
+                    ))}
+
+                    {/* User typing indicator in thread */}
+                    {typingUsers.has(selectedUserId) && (
+                      <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+                        <div
+                          style={{
+                            padding: '10px 16px',
+                            borderRadius: '18px 18px 18px 4px',
+                            background: mode === 'dark' ? '#2d2d3d' : '#f0f0f7',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 4,
+                          }}
+                        >
+                          {[0, 150, 300].map((delay) => (
+                            <span
+                              key={delay}
+                              style={{
+                                display: 'inline-block',
+                                width: 7,
+                                height: 7,
+                                borderRadius: '50%',
+                                background: mode === 'dark' ? '#aaa' : '#999',
+                                animation: 'supportBounce 1.2s ease-in-out infinite',
+                                animationDelay: `${delay}ms`,
+                              }}
+                            />
+                          ))}
+                          <style>{`
+                            @keyframes supportBounce {
+                              0%, 60%, 100% { transform: translateY(0); }
+                              30% { transform: translateY(-4px); }
+                            }
+                          `}</style>
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
 
@@ -482,7 +648,7 @@ export default function SupportPage() {
               >
                 <Input
                   value={input}
-                  onChange={(e) => setInput(e.target.value)}
+                  onChange={handleInputChange}
                   onPressEnter={sendReply}
                   placeholder="Type a reply..."
                   style={{ flex: 1, borderRadius: 20, paddingLeft: 16 }}
