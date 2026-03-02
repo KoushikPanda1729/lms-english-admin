@@ -15,6 +15,7 @@ import {
   TagOutlined,
   BellOutlined,
   CustomerServiceOutlined,
+  FormOutlined,
 } from '@ant-design/icons';
 import { Badge } from 'antd';
 import { useEffect, useState } from 'react';
@@ -56,6 +57,12 @@ const menuItems = [
     icon: <CustomerServiceOutlined />,
     label: 'Support',
     path: ROUTES.SUPPORT,
+  },
+  {
+    key: MENU_KEYS.ONBOARDING,
+    icon: <FormOutlined />,
+    label: 'Onboarding',
+    path: ROUTES.ONBOARDING,
   },
   { key: MENU_KEYS.SETTINGS, icon: <SettingOutlined />, label: 'Settings', path: ROUTES.SETTINGS },
 ];
