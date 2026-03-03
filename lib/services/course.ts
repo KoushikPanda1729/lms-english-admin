@@ -8,6 +8,7 @@ export const courseService = {
         id: string;
         title: string;
         description: string | null;
+        thumbnailUrl: string | null;
         level: string | null;
         isPremium: boolean;
         price: number;
@@ -50,5 +51,14 @@ export const courseService = {
 
   async deleteCourse(id: string) {
     await api.delete(`/admin/courses/${id}`);
+  },
+
+  async uploadThumbnail(id: string, file: File) {
+    const form = new FormData();
+    form.append('thumbnail', file);
+    const { data } = await api.post(`/admin/courses/${id}/thumbnail`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return data.data;
   },
 };

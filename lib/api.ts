@@ -6,7 +6,6 @@ const api = axios.create({
   withCredentials: true, // send httpOnly cookies on every request
 });
 
-// Auto-refresh on 401
 let isRefreshing = false;
 let failedQueue: Array<{ resolve: () => void; reject: (e: unknown) => void }> = [];
 
@@ -20,14 +19,14 @@ api.interceptors.response.use(
   async (error) => {
     const original = error.config;
 
-    // Skip retry for auth endpoints to avoid infinite loops
-    if (
-      error.response?.status === 401 &&
-      !original._retry &&
-      !original.url?.includes('/auth/refresh') &&
-      !original.url?.includes('/auth/login') &&
-      !original.url?.includes('/auth/self')
-    ) {
+    // Only skip the refresh endpoint itself (prevents infinite loop).
+    // /auth/login has no session yet. Everything else — including /auth/self —
+    // should attempt a silent refresh when a 401 is received.
+    if (original?.url?.includes('/auth/refresh') || original?.url?.includes('/auth/login')) {
+      return Promise.reject(error);
+    }
+
+    if (error.response?.status === 401 && !original._retry) {
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve: () => resolve(api(original)), reject });
@@ -39,11 +38,7 @@ api.interceptors.response.use(
 
       try {
         // refreshToken is in httpOnly cookie — no body needed
-        await axios.post(
-          `${process.env.NEXT_PUBLIC_API_URL}/auth/refresh`,
-          {},
-          { withCredentials: true },
-        );
+        await api.post('/auth/refresh');
         processQueue(null);
         return api(original);
       } catch (err) {

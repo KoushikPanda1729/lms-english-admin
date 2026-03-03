@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Table,
@@ -26,11 +26,13 @@ import {
   EditOutlined,
   EyeOutlined,
   DeleteOutlined,
+  PictureOutlined,
+  CloseCircleFilled,
 } from '@ant-design/icons';
 import PageHeader from '@/components/shared/PageHeader';
 import { useAppSelector } from '@/store/hooks';
 import { getTokens } from '@/lib/theme';
-import { LEVEL_COLORS, STATUS_COLORS } from '@/lib/constants';
+import { LEVEL_COLORS } from '@/lib/constants';
 import { courseService } from '@/lib/services/course';
 
 const { Text } = Typography;
@@ -39,6 +41,7 @@ interface ApiCourse {
   id: string;
   title: string;
   description: string | null;
+  thumbnailUrl: string | null;
   level: string | null;
   isPremium: boolean;
   price: number;
@@ -61,12 +64,18 @@ export default function CoursesPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [createLoading, setCreateLoading] = useState(false);
   const [createForm] = Form.useForm();
+  const [createThumbFile, setCreateThumbFile] = useState<File | null>(null);
+  const [createThumbPreview, setCreateThumbPreview] = useState<string | null>(null);
+  const createThumbRef = useRef<HTMLInputElement>(null);
 
   // Edit modal
   const [editOpen, setEditOpen] = useState(false);
   const [editLoading, setEditLoading] = useState(false);
   const [editForm] = Form.useForm();
   const [editingCourse, setEditingCourse] = useState<ApiCourse | null>(null);
+  const [editThumbFile, setEditThumbFile] = useState<File | null>(null);
+  const [editThumbPreview, setEditThumbPreview] = useState<string | null>(null);
+  const editThumbRef = useRef<HTMLInputElement>(null);
 
   const router = useRouter();
   const mode = useAppSelector((state) => state.theme.mode);
@@ -99,6 +108,22 @@ export default function CoursesPage() {
     return matchesSearch && matchesLevel;
   });
 
+  const pickThumb = (
+    e: React.ChangeEvent<HTMLInputElement>,
+    setFile: (f: File | null) => void,
+    setPreview: (p: string | null) => void,
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      messageApi.error('Image must be under 5 MB');
+      return;
+    }
+    setFile(file);
+    setPreview(URL.createObjectURL(file));
+    e.target.value = '';
+  };
+
   const handleCreate = async (values: {
     title: string;
     description?: string;
@@ -108,16 +133,21 @@ export default function CoursesPage() {
   }) => {
     setCreateLoading(true);
     try {
-      await courseService.createCourse({
+      const created = await courseService.createCourse({
         title: values.title,
         description: values.description,
         level: values.level,
         isPremium: values.isPremium,
         price: values.price,
       });
+      if (createThumbFile) {
+        await courseService.uploadThumbnail(created.id, createThumbFile);
+      }
       messageApi.success('Course created successfully');
       setCreateOpen(false);
       createForm.resetFields();
+      setCreateThumbFile(null);
+      setCreateThumbPreview(null);
       fetchCourses(page);
     } catch {
       messageApi.error('Failed to create course');
@@ -138,10 +168,15 @@ export default function CoursesPage() {
     setEditLoading(true);
     try {
       await courseService.updateCourse(editingCourse.id, values);
+      if (editThumbFile) {
+        await courseService.uploadThumbnail(editingCourse.id, editThumbFile);
+      }
       messageApi.success('Course updated successfully');
       setEditOpen(false);
       editForm.resetFields();
       setEditingCourse(null);
+      setEditThumbFile(null);
+      setEditThumbPreview(null);
       fetchCourses(page);
     } catch {
       messageApi.error('Failed to update course');
@@ -152,6 +187,8 @@ export default function CoursesPage() {
 
   const openEdit = (record: ApiCourse) => {
     setEditingCourse(record);
+    setEditThumbFile(null);
+    setEditThumbPreview(null);
     editForm.setFieldsValue({
       title: record.title,
       description: record.description,
@@ -257,24 +294,26 @@ export default function CoursesPage() {
       ),
     },
     {
-      title: 'Status',
+      title: 'Published',
       key: 'status',
-      render: (_: unknown, record: ApiCourse) => {
-        const status = record.isPublished ? 'published' : 'draft';
-        return (
-          <Tag
-            style={{
-              background: `${STATUS_COLORS[status]}18`,
-              color: STATUS_COLORS[status],
-              border: `1px solid ${STATUS_COLORS[status]}30`,
-              borderRadius: 6,
-              textTransform: 'capitalize' as const,
-            }}
-          >
-            {status}
-          </Tag>
-        );
-      },
+      render: (_: unknown, record: ApiCourse) => (
+        <Switch
+          checked={record.isPublished}
+          checkedChildren="Live"
+          unCheckedChildren="Draft"
+          onChange={async (checked) => {
+            try {
+              await courseService.updateCourse(record.id, { isPublished: checked });
+              setCourses((prev) =>
+                prev.map((c) => (c.id === record.id ? { ...c, isPublished: checked } : c)),
+              );
+              messageApi.success(checked ? 'Course published' : 'Course unpublished');
+            } catch {
+              messageApi.error('Failed to update status');
+            }
+          }}
+        />
+      ),
     },
     {
       title: 'Premium',
@@ -368,15 +407,24 @@ export default function CoursesPage() {
       </Card>
 
       {/* Create Course Modal */}
+      <input
+        ref={createThumbRef}
+        type="file"
+        accept="image/*"
+        style={{ display: 'none' }}
+        onChange={(e) => pickThumb(e, setCreateThumbFile, setCreateThumbPreview)}
+      />
       <Modal
         title="Create Course"
         open={createOpen}
         onCancel={() => {
           setCreateOpen(false);
           createForm.resetFields();
+          setCreateThumbFile(null);
+          setCreateThumbPreview(null);
         }}
         footer={null}
-        width={520}
+        width={560}
       >
         <Form
           form={createForm}
@@ -385,27 +433,90 @@ export default function CoursesPage() {
           initialValues={{ isPremium: false, price: 0 }}
           style={{ marginTop: 16 }}
         >
+          {/* Thumbnail upload */}
+          <Form.Item label="Thumbnail">
+            <div
+              onClick={() => createThumbRef.current?.click()}
+              style={{
+                width: '100%',
+                height: 140,
+                borderRadius: 10,
+                border: '1.5px dashed #d9d9d9',
+                cursor: 'pointer',
+                overflow: 'hidden',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: '#fafafa',
+                position: 'relative',
+              }}
+            >
+              {createThumbPreview ? (
+                <>
+                  <img
+                    src={createThumbPreview}
+                    alt="thumbnail"
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setCreateThumbFile(null);
+                      setCreateThumbPreview(null);
+                    }}
+                    style={{
+                      position: 'absolute',
+                      top: 6,
+                      right: 6,
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: '#fff',
+                      fontSize: 18,
+                      lineHeight: 1,
+                    }}
+                  >
+                    <CloseCircleFilled
+                      style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.5))' }}
+                    />
+                  </button>
+                </>
+              ) : (
+                <div style={{ textAlign: 'center', color: '#8c8c8c' }}>
+                  <PictureOutlined style={{ fontSize: 28, marginBottom: 8, display: 'block' }} />
+                  <div style={{ fontSize: 13 }}>Click to upload thumbnail</div>
+                  <div style={{ fontSize: 11, color: '#bfbfbf', marginTop: 2 }}>
+                    JPG, PNG · max 5 MB
+                  </div>
+                </div>
+              )}
+            </div>
+          </Form.Item>
+
           <Form.Item name="title" label="Title" rules={[{ required: true, message: 'Required' }]}>
             <Input placeholder="Course title" />
           </Form.Item>
           <Form.Item name="description" label="Description">
             <Input.TextArea rows={3} placeholder="Course description" />
           </Form.Item>
-          <Form.Item name="level" label="Level">
-            <Select
-              placeholder="Select level"
-              options={[
-                { value: 'beginner', label: 'Beginner' },
-                { value: 'intermediate', label: 'Intermediate' },
-                { value: 'advanced', label: 'Advanced' },
-              ]}
-            />
-          </Form.Item>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <Form.Item name="level" label="Level">
+              <Select
+                placeholder="Select level"
+                options={[
+                  { value: 'beginner', label: 'Beginner' },
+                  { value: 'intermediate', label: 'Intermediate' },
+                  { value: 'advanced', label: 'Advanced' },
+                ]}
+              />
+            </Form.Item>
+            <Form.Item name="price" label="Price (₹)">
+              <InputNumber min={0} style={{ width: '100%' }} placeholder="e.g. 499" />
+            </Form.Item>
+          </div>
           <Form.Item name="isPremium" label="Premium" valuePropName="checked">
             <Switch />
-          </Form.Item>
-          <Form.Item name="price" label="Price (in smallest currency unit)">
-            <InputNumber min={0} style={{ width: '100%' }} placeholder="e.g. 49900 for ₹499" />
           </Form.Item>
           <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
             <Space>
@@ -413,6 +524,8 @@ export default function CoursesPage() {
                 onClick={() => {
                   setCreateOpen(false);
                   createForm.resetFields();
+                  setCreateThumbFile(null);
+                  setCreateThumbPreview(null);
                 }}
               >
                 Cancel
@@ -426,6 +539,13 @@ export default function CoursesPage() {
       </Modal>
 
       {/* Edit Course Modal */}
+      <input
+        ref={editThumbRef}
+        type="file"
+        accept="image/*"
+        style={{ display: 'none' }}
+        onChange={(e) => pickThumb(e, setEditThumbFile, setEditThumbPreview)}
+      />
       <Modal
         title="Edit Course"
         open={editOpen}
@@ -433,36 +553,122 @@ export default function CoursesPage() {
           setEditOpen(false);
           editForm.resetFields();
           setEditingCourse(null);
+          setEditThumbFile(null);
+          setEditThumbPreview(null);
         }}
         footer={null}
-        width={520}
+        width={560}
       >
         <Form form={editForm} layout="vertical" onFinish={handleEdit} style={{ marginTop: 16 }}>
+          {/* Thumbnail upload */}
+          <Form.Item label="Thumbnail">
+            <div
+              onClick={() => editThumbRef.current?.click()}
+              style={{
+                width: '100%',
+                height: 140,
+                borderRadius: 10,
+                border: '1.5px dashed #d9d9d9',
+                cursor: 'pointer',
+                overflow: 'hidden',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: '#fafafa',
+                position: 'relative',
+              }}
+            >
+              {editThumbPreview || editingCourse?.thumbnailUrl ? (
+                <>
+                  <img
+                    src={editThumbPreview ?? editingCourse?.thumbnailUrl ?? ''}
+                    alt="thumbnail"
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                  {editThumbPreview && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditThumbFile(null);
+                        setEditThumbPreview(null);
+                      }}
+                      style={{
+                        position: 'absolute',
+                        top: 6,
+                        right: 6,
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: '#fff',
+                        fontSize: 18,
+                        lineHeight: 1,
+                      }}
+                    >
+                      <CloseCircleFilled
+                        style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.5))' }}
+                      />
+                    </button>
+                  )}
+                  <div
+                    style={{
+                      position: 'absolute',
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      background: 'rgba(0,0,0,0.45)',
+                      color: '#fff',
+                      fontSize: 11,
+                      textAlign: 'center',
+                      padding: '4px 0',
+                    }}
+                  >
+                    {editThumbPreview
+                      ? 'New thumbnail selected — click to change'
+                      : 'Current thumbnail — click to replace'}
+                  </div>
+                </>
+              ) : (
+                <div style={{ textAlign: 'center', color: '#8c8c8c' }}>
+                  <PictureOutlined style={{ fontSize: 28, marginBottom: 8, display: 'block' }} />
+                  <div style={{ fontSize: 13 }}>Click to upload thumbnail</div>
+                  <div style={{ fontSize: 11, color: '#bfbfbf', marginTop: 2 }}>
+                    JPG, PNG · max 5 MB
+                  </div>
+                </div>
+              )}
+            </div>
+          </Form.Item>
+
           <Form.Item name="title" label="Title">
             <Input placeholder="Course title" />
           </Form.Item>
           <Form.Item name="description" label="Description">
             <Input.TextArea rows={3} placeholder="Course description" />
           </Form.Item>
-          <Form.Item name="level" label="Level">
-            <Select
-              placeholder="Select level"
-              options={[
-                { value: 'beginner', label: 'Beginner' },
-                { value: 'intermediate', label: 'Intermediate' },
-                { value: 'advanced', label: 'Advanced' },
-              ]}
-            />
-          </Form.Item>
-          <Form.Item name="isPremium" label="Premium" valuePropName="checked">
-            <Switch />
-          </Form.Item>
-          <Form.Item name="isPublished" label="Published" valuePropName="checked">
-            <Switch />
-          </Form.Item>
-          <Form.Item name="price" label="Price (in smallest currency unit)">
-            <InputNumber min={0} style={{ width: '100%' }} placeholder="e.g. 49900 for ₹499" />
-          </Form.Item>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <Form.Item name="level" label="Level">
+              <Select
+                placeholder="Select level"
+                options={[
+                  { value: 'beginner', label: 'Beginner' },
+                  { value: 'intermediate', label: 'Intermediate' },
+                  { value: 'advanced', label: 'Advanced' },
+                ]}
+              />
+            </Form.Item>
+            <Form.Item name="price" label="Price (₹)">
+              <InputNumber min={0} style={{ width: '100%' }} placeholder="e.g. 499" />
+            </Form.Item>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <Form.Item name="isPremium" label="Premium" valuePropName="checked">
+              <Switch />
+            </Form.Item>
+            <Form.Item name="isPublished" label="Published" valuePropName="checked">
+              <Switch />
+            </Form.Item>
+          </div>
           <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
             <Space>
               <Button
@@ -470,6 +676,8 @@ export default function CoursesPage() {
                   setEditOpen(false);
                   editForm.resetFields();
                   setEditingCourse(null);
+                  setEditThumbFile(null);
+                  setEditThumbPreview(null);
                 }}
               >
                 Cancel
