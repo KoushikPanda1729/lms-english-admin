@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { Layout, Spin } from 'antd';
 import Sidebar from '@/components/layout/Sidebar';
@@ -20,15 +20,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const t = getTokens(mode);
   const router = useRouter();
   const pathname = usePathname();
+  // Keep a ref so the one-time effect always sees the latest pathname for the
+  // redirect URL, without re-triggering the effect on every navigation.
+  const pathnameRef = useRef(pathname);
+  pathnameRef.current = pathname;
+
   const dispatch = useAppDispatch();
   const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
+    // Auth is verified ONCE on mount. Subsequent 401s are handled silently by
+    // the axios interceptor (token refresh). Re-running this on every pathname
+    // change caused a refresh-loop when the access token was expired mid-session.
     authService
       .self()
       .then((user) => {
         if (!ADMIN_ROLES.includes(user.role)) {
-          router.replace(`/login?redirect=${encodeURIComponent(pathname)}`);
+          router.replace(`/login?redirect=${encodeURIComponent(pathnameRef.current)}`);
           return;
         }
         dispatch(
@@ -41,9 +49,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         setAuthChecked(true);
       })
       .catch(() => {
-        router.replace(`/login?redirect=${encodeURIComponent(pathname)}`);
+        router.replace(`/login?redirect=${encodeURIComponent(pathnameRef.current)}`);
       });
-  }, [router, pathname, dispatch]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // intentionally empty — run once on mount only
 
   // Show full-page spinner while verifying auth — prevents content flash
   if (!authChecked) {
