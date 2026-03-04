@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import Hls from 'hls.js';
 import { useParams, useRouter } from 'next/navigation';
 import {
   Card,
@@ -194,9 +195,9 @@ function SortableLessonRow({
                 PDF uploaded
               </Tag>
             )}
-            {lesson.videoUrl && (
+            {(lesson.videoUrl || lesson.hlsPath) && (
               <Tag color="purple" style={{ borderRadius: 4, fontSize: 11 }}>
-                Video uploaded
+                {lesson.hlsPath ? 'HLS video' : 'Video uploaded'}
               </Tag>
             )}
           </Space>
@@ -237,6 +238,34 @@ function SortableLessonRow({
       </Space>
     </div>
   );
+}
+
+// ─── HLS Video Preview ────────────────────────────────────────────────────────
+
+function HlsVideoPreview({ courseId, lessonId }: { courseId: string; lessonId: string }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5503';
+  const streamUrl = `${apiBase}/courses/${courseId}/lessons/${lessonId}/stream`;
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (Hls.isSupported()) {
+      const hls = new Hls({
+        xhrSetup: (xhr, url) => {
+          if (url.startsWith(apiBase)) xhr.withCredentials = true;
+        },
+      });
+      hls.loadSource(streamUrl);
+      hls.attachMedia(video);
+      return () => hls.destroy();
+    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = streamUrl;
+    }
+  }, [streamUrl, apiBase]);
+
+  return <video ref={videoRef} controls style={{ width: '100%', borderRadius: 10 }} />;
 }
 
 // ─── Main page ────────────────────────────────────────────────────────────────
@@ -807,9 +836,10 @@ export default function CourseContentPage() {
             >
               <Button icon={<UploadOutlined />}>Select Video File</Button>
             </Upload>
-            {editingLesson?.videoUrl && !videoFile && (
+            {(editingLesson?.videoUrl || editingLesson?.hlsPath) && !videoFile && (
               <Text style={{ color: '#6C5CE7', fontSize: 12, display: 'block', marginTop: 4 }}>
-                ✓ Video already uploaded — leave empty to keep existing
+                ✓ {editingLesson.hlsPath ? 'HLS video already uploaded' : 'Video already uploaded'}{' '}
+                — leave empty to keep existing
               </Text>
             )}
           </Form.Item>
@@ -904,7 +934,9 @@ export default function CourseContentPage() {
         width={720}
         destroyOnClose
       >
-        {videoPreviewLesson?.videoUrl ? (
+        {videoPreviewLesson?.hlsPath ? (
+          <HlsVideoPreview courseId={courseId} lessonId={videoPreviewLesson.id} />
+        ) : videoPreviewLesson?.videoUrl ? (
           <div>
             {videoPreviewLesson.videoUrl.includes('youtube.com') ||
             videoPreviewLesson.videoUrl.includes('youtu.be') ? (

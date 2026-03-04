@@ -7,6 +7,7 @@ export interface Lesson {
   type: 'video' | 'pdf' | 'text' | 'quiz';
   content: string | null;
   videoUrl: string | null;
+  hlsPath: string | null;
   pdfUrl: string | null;
   order: number;
   durationMinutes: number | null;
