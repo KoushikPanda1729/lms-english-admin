@@ -829,6 +829,16 @@ export default function CourseContentPage() {
               maxCount={1}
               beforeUpload={(file) => {
                 setVideoFile(file);
+                // Extract video duration and prefill the form field
+                const video = document.createElement('video');
+                video.preload = 'metadata';
+                const objectUrl = URL.createObjectURL(file);
+                video.src = objectUrl;
+                video.onloadedmetadata = () => {
+                  const durationInMinutes = Math.ceil(video.duration / 60);
+                  videoForm.setFieldsValue({ durationMinutes: durationInMinutes });
+                  URL.revokeObjectURL(objectUrl);
+                };
                 return false;
               }}
               onRemove={() => setVideoFile(null)}
