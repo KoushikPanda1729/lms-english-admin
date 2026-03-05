@@ -25,6 +25,7 @@ import {
   UserOutlined,
   EyeOutlined,
   CalendarOutlined,
+  StarFilled,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import type { RangePickerProps } from 'antd/es/date-picker';
@@ -243,11 +244,12 @@ export default function SessionsPage() {
         const ratings = r.ratings ?? [];
         if (ratings.length === 0)
           return <Text style={{ color: t.textMuted, fontSize: 12 }}>Not rated</Text>;
+        const avg = (ratings.reduce((s, rt) => s + rt.stars, 0) / ratings.length).toFixed(1);
         return (
-          <Space size={4} wrap>
-            {ratings.map((rt) => (
-              <Rate key={rt.id} disabled value={rt.stars} style={{ fontSize: 12 }} />
-            ))}
+          <Space size={4}>
+            <StarFilled style={{ color: '#faad14', fontSize: 14 }} />
+            <Text style={{ color: t.textPrimary, fontWeight: 600, fontSize: 13 }}>{avg}</Text>
+            <Text style={{ color: t.textMuted, fontSize: 12 }}>({ratings.length})</Text>
           </Space>
         );
       },
@@ -457,23 +459,44 @@ export default function SessionsPage() {
                   <div
                     key={rt.id}
                     style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
                       padding: '10px 14px',
                       borderRadius: 8,
                       border: `1px solid ${t.border}`,
                     }}
                   >
-                    <Space size={8}>
-                      <Avatar size={28} icon={<UserOutlined />} style={{ background: '#6C5CE7' }} />
-                      <div>
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                      }}
+                    >
+                      <Space size={8}>
+                        <Avatar
+                          size={28}
+                          icon={<UserOutlined />}
+                          style={{ background: '#6C5CE7' }}
+                        />
                         <Text style={{ color: t.textPrimary, fontSize: 13 }}>
                           <b>{getUserLabel(rt.rater)}</b> rated <b>{getUserLabel(rt.rated)}</b>
                         </Text>
-                      </div>
-                    </Space>
-                    <Rate disabled value={rt.stars} style={{ fontSize: 14 }} />
+                      </Space>
+                      <Rate disabled value={rt.stars} style={{ fontSize: 14 }} />
+                    </div>
+                    {rt.feedback && (
+                      <Text
+                        style={{
+                          display: 'block',
+                          marginTop: 6,
+                          fontSize: 12,
+                          color: t.textMuted,
+                          fontStyle: 'italic',
+                          paddingLeft: 36,
+                        }}
+                      >
+                        &ldquo;{rt.feedback}&rdquo;
+                      </Text>
+                    )}
                   </div>
                 ))}
               </div>

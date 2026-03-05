@@ -12,6 +12,7 @@ export interface SessionRating {
   raterId: string;
   ratedId: string;
   stars: number;
+  feedback: string | null;
   createdAt: string;
   rater?: SessionUser;
   rated?: SessionUser;
