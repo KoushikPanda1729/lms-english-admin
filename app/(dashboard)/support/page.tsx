@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Avatar, Badge, Button, Empty, Input, Spin, Typography } from 'antd';
+import { Avatar, Badge, Button, Empty, Input, Spin, Tag, Typography } from 'antd';
 import { SendOutlined, CustomerServiceOutlined, UserOutlined } from '@ant-design/icons';
 import { getAdminSocket, disconnectAdminSocket } from '@/lib/socket';
 import { supportService, type Conversation, type SupportMsg } from '@/lib/services/support';
@@ -80,6 +80,7 @@ export default function SupportPage() {
         userId: string;
         displayName: string;
         avatarUrl: string | null;
+        isBanned?: boolean;
         text: string;
         fromAdmin: boolean;
         createdAt: string;
@@ -91,6 +92,7 @@ export default function SupportPage() {
             userId: payload.userId,
             displayName: payload.displayName || 'User',
             avatarUrl: payload.avatarUrl,
+            isBanned: payload.isBanned || (idx >= 0 ? prev[idx].isBanned : false),
             lastMessage: payload.text,
             lastMessageAt: payload.createdAt,
             unreadCount:
@@ -403,19 +405,49 @@ export default function SupportPage() {
 
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6 }}>
-                    <Text
-                      strong
-                      style={{
-                        color: t.textPrimary,
-                        fontSize: 13,
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        maxWidth: 140,
-                      }}
-                    >
-                      {conv.displayName}
-                    </Text>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+                      <Text
+                        strong
+                        style={{
+                          color: t.textPrimary,
+                          fontSize: 13,
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          maxWidth: conv.isBanned ? 80 : 140,
+                        }}
+                      >
+                        {conv.displayName}
+                      </Text>
+                      {conv.isBanned && (
+                        <Tag
+                          color="error"
+                          style={{
+                            fontSize: 10,
+                            padding: '0 4px',
+                            lineHeight: '16px',
+                            height: 16,
+                            flexShrink: 0,
+                          }}
+                        >
+                          Banned
+                        </Tag>
+                      )}
+                      {conv.isGuest && !conv.isBanned && (
+                        <Tag
+                          color="orange"
+                          style={{
+                            fontSize: 10,
+                            padding: '0 4px',
+                            lineHeight: '16px',
+                            height: 16,
+                            flexShrink: 0,
+                          }}
+                        >
+                          Guest
+                        </Tag>
+                      )}
+                    </div>
                     <Text style={{ color: t.textSecondary, fontSize: 11, flexShrink: 0 }}>
                       {fmtTime(conv.lastMessageAt)}
                     </Text>
@@ -509,12 +541,21 @@ export default function SupportPage() {
                         )}
                       </div>
                       <div>
-                        <Text
-                          strong
-                          style={{ color: t.textPrimary, fontSize: 14, display: 'block' }}
-                        >
-                          {conv.displayName}
-                        </Text>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <Text strong style={{ color: t.textPrimary, fontSize: 14 }}>
+                            {conv.displayName}
+                          </Text>
+                          {conv.isBanned && (
+                            <Tag color="error" style={{ fontSize: 11, margin: 0 }}>
+                              Banned
+                            </Tag>
+                          )}
+                          {conv.isGuest && !conv.isBanned && (
+                            <Tag color="orange" style={{ fontSize: 11, margin: 0 }}>
+                              Guest
+                            </Tag>
+                          )}
+                        </div>
                         {typingUsers.has(selectedUserId) ? (
                           <Text style={{ fontSize: 11, color: '#6C5CE7', fontStyle: 'italic' }}>
                             typing...

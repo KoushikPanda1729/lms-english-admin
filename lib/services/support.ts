@@ -7,6 +7,8 @@ export interface Conversation {
   lastMessage: string;
   lastMessageAt: string;
   unreadCount: number;
+  isBanned?: boolean;
+  isGuest?: boolean;
 }
 
 export interface SupportMsg {
