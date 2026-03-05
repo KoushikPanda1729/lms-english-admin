@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Card,
   Form,
@@ -62,12 +62,17 @@ export default function NotificationsPage() {
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
   const [userOptions, setUserOptions] = useState<UserOption[]>([]);
   const [userSearchLoading, setUserSearchLoading] = useState(false);
+  const [userPage, setUserPage] = useState(1);
+  const [userTotal, setUserTotal] = useState(0);
+  const [userSearchQuery, setUserSearchQuery] = useState('');
+  const [loadingMore, setLoadingMore] = useState(false);
   const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   const composeRef = useRef<HTMLDivElement>(null);
   const mode = useAppSelector((state) => state.theme.mode);
   const t = getTokens(mode);
 
   const PAGE_SIZE = 10;
+  const USER_PAGE_SIZE = 10;
 
   const fetchHistory = useCallback(
     async (pg = historyPage) => {
@@ -91,23 +96,40 @@ export default function NotificationsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [historyPage]);
 
+  const fetchUsers = useCallback(async (page: number, search: string, append = false) => {
+    if (append) {
+      setLoadingMore(true);
+    } else {
+      setUserSearchLoading(true);
+    }
+    try {
+      const result = await adminService.listUsers({ page, limit: USER_PAGE_SIZE, search });
+      const newOptions = result.users.map((u) => ({ value: u.user.id, label: u.user.email }));
+      setUserOptions((prev) => (append ? [...prev, ...newOptions] : newOptions));
+      setUserTotal(result.total);
+      setUserPage(page);
+    } catch {
+      if (!append) setUserOptions([]);
+    } finally {
+      setUserSearchLoading(false);
+      setLoadingMore(false);
+    }
+  }, []);
+
   const searchUsers = (query: string) => {
     if (searchDebounce.current) clearTimeout(searchDebounce.current);
+    setUserSearchQuery(query);
     if (!query.trim()) {
-      setUserOptions([]);
+      fetchUsers(1, '');
       return;
     }
-    searchDebounce.current = setTimeout(async () => {
-      setUserSearchLoading(true);
-      try {
-        const result = await adminService.listUsers({ page: 1, limit: 20, search: query });
-        setUserOptions(result.users.map((u) => ({ value: u.user.id, label: u.user.email })));
-      } catch {
-        setUserOptions([]);
-      } finally {
-        setUserSearchLoading(false);
-      }
+    searchDebounce.current = setTimeout(() => {
+      fetchUsers(1, query);
     }, 300);
+  };
+
+  const handleLoadMore = () => {
+    fetchUsers(userPage + 1, userSearchQuery, true);
   };
 
   const handleSend = async (values: {
@@ -128,6 +150,9 @@ export default function NotificationsPage() {
       form.resetFields();
       setTargetType('all');
       setUserOptions([]);
+      setUserPage(1);
+      setUserTotal(0);
+      setUserSearchQuery('');
       // Refresh history from page 1
       setHistoryPage(1);
       fetchHistory(1);
@@ -347,16 +372,48 @@ export default function NotificationsPage() {
                   showSearch
                   filterOption={false}
                   onSearch={searchUsers}
+                  onDropdownVisibleChange={(open) => {
+                    if (open && userOptions.length === 0) {
+                      fetchUsers(1, '');
+                    }
+                  }}
                   loading={userSearchLoading}
                   options={userOptions}
                   placeholder="Search by email to find users..."
                   notFoundContent={
                     <Text style={{ color: t.textMuted, padding: '8px 12px', display: 'block' }}>
-                      {userSearchLoading ? 'Searching...' : 'Type to search users'}
+                      {userSearchLoading ? 'Searching...' : 'No users found'}
                     </Text>
                   }
                   style={{ width: '100%', minHeight: 44 }}
                   maxTagCount="responsive"
+                  dropdownRender={(menu) => (
+                    <>
+                      {menu}
+                      {userOptions.length < userTotal && (
+                        <div
+                          style={{
+                            padding: '8px 12px',
+                            textAlign: 'center',
+                            borderTop: `1px solid ${t.border}`,
+                          }}
+                        >
+                          <Button
+                            type="link"
+                            size="small"
+                            loading={loadingMore}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleLoadMore();
+                            }}
+                            style={{ color: '#6C5CE7', fontSize: 13, fontWeight: 500 }}
+                          >
+                            See more ({userTotal - userOptions.length} remaining)
+                          </Button>
+                        </div>
+                      )}
+                    </>
+                  )}
                 />
               </Form.Item>
             )}
