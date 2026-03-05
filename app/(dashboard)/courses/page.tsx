@@ -28,12 +28,17 @@ import {
   DeleteOutlined,
   PictureOutlined,
   CloseCircleFilled,
+  TeamOutlined,
+  UserOutlined,
+  CheckCircleFilled,
 } from '@ant-design/icons';
+import { Avatar, Progress } from 'antd';
 import PageHeader from '@/components/shared/PageHeader';
 import { useAppSelector } from '@/store/hooks';
 import { getTokens } from '@/lib/theme';
 import { LEVEL_COLORS } from '@/lib/constants';
 import { courseService } from '@/lib/services/course';
+import { adminService } from '@/lib/services/admin';
 
 const { Text } = Typography;
 
@@ -76,6 +81,15 @@ export default function CoursesPage() {
   const [editThumbFile, setEditThumbFile] = useState<File | null>(null);
   const [editThumbPreview, setEditThumbPreview] = useState<string | null>(null);
   const editThumbRef = useRef<HTMLInputElement>(null);
+
+  // Students modal
+  const [studentsOpen, setStudentsOpen] = useState(false);
+  const [studentsLoading, setStudentsLoading] = useState(false);
+  const [studentsData, setStudentsData] = useState<Awaited<
+    ReturnType<typeof adminService.getCourseStudents>
+  > | null>(null);
+  const [studentsCourse, setStudentsCourse] = useState<ApiCourse | null>(null);
+  const [studentsPage, setStudentsPage] = useState(1);
 
   const router = useRouter();
   const mode = useAppSelector((state) => state.theme.mode);
@@ -200,6 +214,21 @@ export default function CoursesPage() {
     setEditOpen(true);
   };
 
+  const openStudents = async (record: ApiCourse, page = 1) => {
+    setStudentsCourse(record);
+    setStudentsOpen(true);
+    setStudentsLoading(true);
+    setStudentsPage(page);
+    try {
+      const result = await adminService.getCourseStudents(record.id, page, 20);
+      setStudentsData(result);
+    } catch {
+      messageApi.error('Failed to load students');
+    } finally {
+      setStudentsLoading(false);
+    }
+  };
+
   const handleDelete = (id: string) => {
     courseService
       .deleteCourse(id)
@@ -216,6 +245,12 @@ export default function CoursesPage() {
       icon: <EyeOutlined />,
       label: 'Manage Content',
       onClick: () => router.push(`/courses/${record.id}`),
+    },
+    {
+      key: 'students',
+      icon: <TeamOutlined />,
+      label: 'View Students',
+      onClick: () => openStudents(record),
     },
     {
       key: 'edit',
@@ -405,6 +440,142 @@ export default function CoursesPage() {
           />
         </Spin>
       </Card>
+
+      {/* Students Modal */}
+      <Modal
+        open={studentsOpen}
+        onCancel={() => setStudentsOpen(false)}
+        footer={null}
+        width={720}
+        destroyOnClose
+        title={
+          <Space>
+            <TeamOutlined style={{ color: '#6C5CE7' }} />
+            <span>Students — {studentsCourse?.title}</span>
+          </Space>
+        }
+      >
+        <Spin spinning={studentsLoading}>
+          {!studentsLoading && studentsData?.students.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px 0', color: t.textMuted }}>
+              No students enrolled yet
+            </div>
+          ) : (
+            <>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8 }}>
+                {(studentsData?.students ?? []).map((s) => {
+                  const payStatus = s.payment?.status;
+                  const payColor =
+                    payStatus === 'paid' ? '#00B894' : payStatus === 'pending' ? '#FDCB6E' : '#aaa';
+                  const name = s.displayName || s.email.split('@')[0];
+                  return (
+                    <div
+                      key={s.userId}
+                      style={{
+                        padding: '10px 14px',
+                        borderRadius: 10,
+                        border: `1px solid ${t.border}`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 12,
+                      }}
+                    >
+                      <Avatar
+                        size={38}
+                        src={s.avatarUrl || undefined}
+                        icon={<UserOutlined />}
+                        style={{
+                          background: 'linear-gradient(135deg, #6C5CE7, #A29BFE)',
+                          flexShrink: 0,
+                        }}
+                      />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            marginBottom: 4,
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <Text strong style={{ color: t.textPrimary, fontSize: 13 }}>
+                              {name}
+                            </Text>
+                            {s.completedAt && (
+                              <CheckCircleFilled style={{ color: '#00B894', fontSize: 12 }} />
+                            )}
+                          </div>
+                          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                            <Text style={{ color: t.textMuted, fontSize: 11 }}>
+                              {s.completedLessons}/{studentsCourse?.totalLessons ?? '?'} lessons
+                            </Text>
+                            {payStatus && (
+                              <Tag
+                                style={{
+                                  background: `${payColor}18`,
+                                  color: payColor,
+                                  border: `1px solid ${payColor}40`,
+                                  borderRadius: 5,
+                                  fontSize: 11,
+                                  margin: 0,
+                                  textTransform: 'capitalize',
+                                }}
+                              >
+                                {payStatus === 'paid' ? `₹${s.payment!.amount} paid` : payStatus}
+                              </Tag>
+                            )}
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <Progress
+                            percent={s.progressPercent}
+                            size={['100%', 5]}
+                            strokeColor={{ '0%': '#6C5CE7', '100%': '#A29BFE' }}
+                            showInfo={false}
+                            style={{ flex: 1, margin: 0 }}
+                          />
+                          <Text style={{ color: t.textMuted, fontSize: 11, flexShrink: 0 }}>
+                            {s.progressPercent}%
+                          </Text>
+                        </div>
+                        <Text style={{ color: t.textMuted, fontSize: 11 }}>{s.email}</Text>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {studentsData && studentsData.total > 20 && (
+                <div style={{ textAlign: 'center', marginTop: 16 }}>
+                  <Space>
+                    <Button
+                      size="small"
+                      disabled={studentsPage <= 1}
+                      onClick={() =>
+                        studentsCourse && openStudents(studentsCourse, studentsPage - 1)
+                      }
+                    >
+                      Previous
+                    </Button>
+                    <Text style={{ color: t.textMuted, fontSize: 12 }}>
+                      {studentsPage} / {Math.ceil(studentsData.total / 20)}
+                    </Text>
+                    <Button
+                      size="small"
+                      disabled={studentsPage >= Math.ceil(studentsData.total / 20)}
+                      onClick={() =>
+                        studentsCourse && openStudents(studentsCourse, studentsPage + 1)
+                      }
+                    >
+                      Next
+                    </Button>
+                  </Space>
+                </div>
+              )}
+            </>
+          )}
+        </Spin>
+      </Modal>
 
       {/* Create Course Modal */}
       <input

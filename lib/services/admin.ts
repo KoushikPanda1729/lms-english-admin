@@ -55,6 +55,44 @@ export const adminService = {
     return data.data;
   },
 
+  async getUserCourses(userId: string) {
+    const { data } = await api.get(`/admin/users/${userId}/courses`);
+    return data.data as Array<{
+      courseId: string;
+      title: string;
+      level: string | null;
+      isPremium: boolean;
+      totalLessons: number;
+      progressPercent: number;
+      completedLessons: number;
+      enrolledAt: string;
+      completedAt: string | null;
+      payment: { status: string; amount: number } | null;
+    }>;
+  },
+
+  async getCourseStudents(courseId: string, page = 1, limit = 20) {
+    const { data } = await api.get(`/admin/courses/${courseId}/students`, {
+      params: { page, limit },
+    });
+    return data.data as {
+      students: Array<{
+        userId: string;
+        email: string;
+        displayName: string | null;
+        avatarUrl: string | null;
+        progressPercent: number;
+        completedLessons: number;
+        enrolledAt: string;
+        completedAt: string | null;
+        payment: { status: string; amount: number } | null;
+      }>;
+      total: number;
+      page: number;
+      limit: number;
+    };
+  },
+
   async listReports(params: { page?: number; limit?: number; status?: string }) {
     const { data } = await api.get('/admin/reports', { params });
     return data.data as {

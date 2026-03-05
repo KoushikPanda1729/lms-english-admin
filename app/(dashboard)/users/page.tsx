@@ -31,7 +31,10 @@ import {
   FireOutlined,
   GlobalOutlined,
   FlagOutlined,
+  BookOutlined,
+  CheckCircleFilled,
 } from '@ant-design/icons';
+import { Progress } from 'antd';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import PageHeader from '@/components/shared/PageHeader';
@@ -91,6 +94,10 @@ export default function UsersPage() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailUser, setDetailUser] = useState<UserDetail | null>(null);
+  const [userCourses, setUserCourses] = useState<
+    Awaited<ReturnType<typeof adminService.getUserCourses>>
+  >([]);
+  const [coursesLoading, setCoursesLoading] = useState(false);
 
   const mode = useAppSelector((state) => state.theme.mode);
   const t = getTokens(mode);
@@ -160,14 +167,20 @@ export default function UsersPage() {
     setDetailOpen(true);
     setDetailLoading(true);
     setDetailUser(null);
+    setUserCourses([]);
     try {
-      const data = await adminService.getUserDetail(id);
-      setDetailUser(data as UserDetail);
+      const [detail, courses] = await Promise.all([
+        adminService.getUserDetail(id),
+        adminService.getUserCourses(id).catch(() => []),
+      ]);
+      setDetailUser(detail as UserDetail);
+      setUserCourses(courses);
     } catch {
       messageApi.error('Failed to load user details');
       setDetailOpen(false);
     } finally {
       setDetailLoading(false);
+      setCoursesLoading(false);
     }
   };
 
@@ -377,7 +390,7 @@ export default function UsersPage() {
         open={detailOpen}
         onCancel={() => setDetailOpen(false)}
         footer={null}
-        width={600}
+        width={640}
         destroyOnClose
         title={
           <Space>
@@ -572,6 +585,102 @@ export default function UsersPage() {
                 <ClockCircleOutlined style={{ marginRight: 4 }} />
                 Last session {dayjs(p.lastSessionAt).fromNow()}
               </Text>
+            )}
+
+            <Divider style={{ margin: '14px 0' }} />
+
+            {/* Courses */}
+            <Text strong style={{ color: t.textPrimary, display: 'block', marginBottom: 10 }}>
+              Enrolled Courses
+            </Text>
+            {coursesLoading ? (
+              <Spin size="small" />
+            ) : userCourses.length === 0 ? (
+              <Text style={{ color: t.textMuted, fontSize: 13 }}>No courses enrolled</Text>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {userCourses.map((c) => {
+                  const payStatus = c.payment?.status;
+                  const payColor =
+                    payStatus === 'paid' ? '#00B894' : payStatus === 'pending' ? '#FDCB6E' : '#aaa';
+                  return (
+                    <div
+                      key={c.courseId}
+                      style={{
+                        padding: '10px 14px',
+                        borderRadius: 10,
+                        border: `1px solid ${t.border}`,
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          marginBottom: 6,
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <BookOutlined style={{ color: '#6C5CE7' }} />
+                          <Text strong style={{ color: t.textPrimary, fontSize: 13 }}>
+                            {c.title}
+                          </Text>
+                          {c.completedAt && (
+                            <CheckCircleFilled style={{ color: '#00B894', fontSize: 13 }} />
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                          {c.isPremium && payStatus && (
+                            <Tag
+                              style={{
+                                background: `${payColor}18`,
+                                color: payColor,
+                                border: `1px solid ${payColor}40`,
+                                borderRadius: 5,
+                                fontSize: 11,
+                                textTransform: 'capitalize',
+                              }}
+                            >
+                              {payStatus === 'paid' ? `₹${c.payment!.amount} paid` : payStatus}
+                            </Tag>
+                          )}
+                          {!c.isPremium && (
+                            <Tag
+                              style={{
+                                background: 'rgba(0,184,148,0.1)',
+                                color: '#00B894',
+                                border: '1px solid rgba(0,184,148,0.25)',
+                                borderRadius: 5,
+                                fontSize: 11,
+                              }}
+                            >
+                              Free
+                            </Tag>
+                          )}
+                        </div>
+                      </div>
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 10,
+                        }}
+                      >
+                        <Progress
+                          percent={c.progressPercent}
+                          size={['100%', 6]}
+                          strokeColor={{ '0%': '#6C5CE7', '100%': '#A29BFE' }}
+                          showInfo={false}
+                          style={{ flex: 1, margin: 0 }}
+                        />
+                        <Text style={{ color: t.textMuted, fontSize: 11, flexShrink: 0 }}>
+                          {c.completedLessons}/{c.totalLessons} lessons · {c.progressPercent}%
+                        </Text>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             )}
 
             <Divider style={{ margin: '14px 0' }} />
