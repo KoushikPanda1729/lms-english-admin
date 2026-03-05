@@ -71,23 +71,25 @@ export default function StatsCard({ data }: { data: StatsCardData }) {
           >
             {data.value}
           </Title>
-          <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
-            {isIncrease ? (
-              <ArrowUpOutlined style={{ color: '#00B894', fontSize: 12 }} />
-            ) : (
-              <ArrowDownOutlined style={{ color: '#FF7675', fontSize: 12 }} />
-            )}
-            <Text
-              style={{
-                color: isIncrease ? '#00B894' : '#FF7675',
-                fontSize: 13,
-                fontWeight: 600,
-              }}
-            >
-              {data.change}%
-            </Text>
-            <Text style={{ color: t.textMuted, fontSize: 12 }}>vs last month</Text>
-          </div>
+          {data.change !== undefined && (
+            <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+              {isIncrease ? (
+                <ArrowUpOutlined style={{ color: '#00B894', fontSize: 12 }} />
+              ) : (
+                <ArrowDownOutlined style={{ color: '#FF7675', fontSize: 12 }} />
+              )}
+              <Text
+                style={{
+                  color: isIncrease ? '#00B894' : '#FF7675',
+                  fontSize: 13,
+                  fontWeight: 600,
+                }}
+              >
+                {data.change}%
+              </Text>
+              <Text style={{ color: t.textMuted, fontSize: 12 }}>vs last month</Text>
+            </div>
+          )}
         </div>
 
         <div

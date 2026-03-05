@@ -45,8 +45,8 @@ export interface Lesson {
 export interface StatsCardData {
   title: string;
   value: string | number;
-  change: number; // percentage change
-  changeType: 'increase' | 'decrease';
+  change?: number; // percentage change
+  changeType?: 'increase' | 'decrease';
   icon: React.ReactNode;
   color: string;
 }
