@@ -111,8 +111,11 @@ export const adminService = {
     };
   },
 
-  async updateReport(id: string, status: string) {
-    const { data } = await api.patch(`/admin/reports/${id}`, { status });
+  async updateReport(id: string, status: string, adminNote?: string) {
+    const { data } = await api.patch(`/admin/reports/${id}`, {
+      status,
+      adminNote: adminNote || null,
+    });
     return data.data;
   },
 };
