@@ -16,13 +16,14 @@ import {
   Empty,
   Popconfirm,
   Tooltip,
+  Popover,
 } from 'antd';
 import {
   BellOutlined,
   SendOutlined,
   TeamOutlined,
   UserOutlined,
-  EditOutlined,
+  InfoCircleOutlined,
   DeleteOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
@@ -163,12 +164,6 @@ export default function NotificationsPage() {
     }
   };
 
-  const handleEdit = (record: BroadcastRecord) => {
-    form.setFieldsValue({ title: record.title, body: record.body, targetType: 'all' });
-    setTargetType('all');
-    composeRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
-
   const handleDelete = async (record: BroadcastRecord) => {
     const key = record.sentAt;
     setDeletingKey(key);
@@ -243,14 +238,26 @@ export default function NotificationsPage() {
       width: 90,
       render: (_: unknown, record: BroadcastRecord) => (
         <Space size={6}>
-          <Tooltip title="Edit & resend">
-            <Button
-              size="small"
-              icon={<EditOutlined />}
-              style={{ borderRadius: 6 }}
-              onClick={() => handleEdit(record)}
-            />
-          </Tooltip>
+          <Popover
+            trigger="hover"
+            placement="left"
+            content={
+              <div style={{ maxWidth: 260 }}>
+                <Text strong style={{ display: 'block', marginBottom: 4 }}>
+                  {record.title}
+                </Text>
+                <Text style={{ fontSize: 13, color: '#555', display: 'block', marginBottom: 8 }}>
+                  {record.body}
+                </Text>
+                <Text style={{ fontSize: 12, color: '#999' }}>
+                  Sent to {record.recipientCount} user{record.recipientCount !== 1 ? 's' : ''} ·{' '}
+                  {dayjs(record.sentAt).format('DD MMM YYYY, HH:mm')}
+                </Text>
+              </div>
+            }
+          >
+            <Button size="small" icon={<InfoCircleOutlined />} style={{ borderRadius: 6 }} />
+          </Popover>
           <Popconfirm
             title="Delete this broadcast?"
             description="This removes the notification from all recipients' history."
