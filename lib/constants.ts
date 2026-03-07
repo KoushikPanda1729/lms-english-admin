@@ -19,6 +19,7 @@ export const ROUTES = {
   SETTINGS: '/settings',
   SUPPORT: '/support',
   ONBOARDING: '/onboarding',
+  AI_PERSONAS: '/ai-personas',
   LOGIN: '/login',
 } as const;
 
@@ -36,6 +37,7 @@ export const MENU_KEYS = {
   SETTINGS: 'settings',
   SUPPORT: 'support',
   ONBOARDING: 'onboarding',
+  AI_PERSONAS: 'ai-personas',
 } as const;
 
 // Level colors
